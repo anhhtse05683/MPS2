@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERP System - Hệ thống Quản lý Doanh nghiệp</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        /* Sidebar collapse styles */
+        /* Sidebar collapse styles (currently pinned by default) */
+    </style>
+
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-header-main d-flex align-items-center gap-2">
+                <div class="logo-icon">
+                    <a class="nav-link" href="/index.html">
+                        <i class="bi bi-box-seam"></i>
+                    </a>
+                </div>
+                <div>
+                    <h4>Weldex Vina ERP</h4>
+                    <small style="opacity: 0.7;">Manufacturing</small>
+                </div>
+            </div>
+        </div>
+        <nav class="sidebar-menu">
+            <div class="menu-section">
+                <div class="menu-section-title">Trang chủ</div>
+                <a href="#dashboard" class="menu-item active">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+            </div>
+            <div class="menu-section">
+                <div class="menu-section-title">Quản lý sản xuất</div>
+                <a href="#production" class="menu-item">
+                    <i class="bi bi-gear-wide-connected"></i>
+                    <span>Kế hoạch sản xuất</span>
+                </a>
+                <a href="#mps" class="menu-item" data-src="/modules/MPS/index.html">
+                    <i class="bi bi-diagram-3"></i>
+                    <span>MRP - Hoạch định</span>
+                </a>
+                <a href="#quality" class="menu-item">
+                    <i class="bi bi-shield-check"></i>
+                    <span>Quản lý chất lượng</span>
+                </a>
+                <a href="#maintenance" class="menu-item">
+                    <i class="bi bi-tools"></i>
+                    <span>Bảo trì thiết bị</span>
+                </a>
+            </div>
+            <div class="menu-section">
+                <div class="menu-section-title">Quản lý sản phẩm</div>
+                <a href="#itemMaster" class="menu-item" data-src="/modules/Product/index.html">
+                    <i class="bi bi-box-seam"></i>
+                    <span>Danh mục sản phẩm</span>
+                </a>
+            </div>
+            <div class="menu-section">
+                <div class="menu-section-title">Quản lý kho</div>
+                <a href="#inventory" class="menu-item">
+                    <i class="bi bi-boxes"></i>
+                    <span>Tồn kho</span>
+                </a>
+                <a href="#warehouse" class="menu-item">
+                    <i class="bi bi-building"></i>
+                    <span>Kho hàng</span>
+                </a>
+                <a href="#purchasing" class="menu-item">
+                    <i class="bi bi-cart-plus"></i>
+                    <span>Mua hàng</span>
+                </a>
+            </div>
+            <div class="menu-section">
+                <div class="menu-section-title">Bán hàng & CRM</div>
+                <a href="#sales" class="menu-item">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    <span>Bán hàng</span>
+                </a>
+                <a href="#crm" class="menu-item">
+                    <i class="bi bi-people"></i>
+                    <span>Quản lý khách hàng</span>
+                </a>
+                <a href="#orders" class="menu-item">
+                    <i class="bi bi-receipt"></i>
+                    <span>Đơn hàng</span>
+                    <span class="badge">12</span>
+                </a>
+            </div>
+            <div class="menu-section">
+                <div class="menu-section-title">Tài chính</div>
+                <a href="#accounting" class="menu-item">
+                    <i class="bi bi-calculator"></i>
+                    <span>Kế toán</span>
+                </a>
+                <a href="#finance" class="menu-item">
+                    <i class="bi bi-wallet2"></i>
+                    <span>Tài chính</span>
+                </a>
+                <a href="#budget" class="menu-item">
+                    <i class="bi bi-pie-chart"></i>
+                    <span>Ngân sách</span>
+                </a>
+            </div>
+            <div class="menu-section">
+                <div class="menu-section-title">Báo cáo</div>
+                <a href="#reports" class="menu-item">
+                    <i class="bi bi-file-earmark-text"></i>
+                    <span>Báo cáo tổng hợp</span>
+                </a>
+                <a href="#analytics" class="menu-item">
+                    <i class="bi bi-graph-up"></i>
+                    <span>Phân tích dữ liệu</span>
+                </a>
+                <a href="#exports" class="menu-item">
+                    <i class="bi bi-download"></i>
+                    <span>Xuất báo cáo</span>
+                </a>
+            </div>
+            <div class="menu-section">
+                <div class="menu-section-title">Hệ thống</div>
+                <a href="#users" class="menu-item">
+                    <i class="bi bi-person-gear"></i>
+                    <span>Quản lý người dùng</span>
+                </a>
+                <a href="#settings" class="menu-item">
+                    <i class="bi bi-sliders"></i>
+                    <span>Cài đặt hệ thống</span>
+                </a>
+                <a href="#help" class="menu-item">
+                    <i class="bi bi-question-circle"></i>
+                    <span>Trợ giúp</span>
+                </a>
+            </div>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Top Navbar -->
+        <div class="top-navbar">
+            <div class="search-box">
+                <i class="bi bi-search"></i>
+                <input type="text" placeholder="Tìm kiếm module, chức năng...">
+            </div>
+            <div class="user-menu">
+                <div class="notification-icon">
+                    <i class="bi bi-bell"></i>
+                    <span class="badge">5</span>
+                </div>
+                <div class="user-profile">
+                    <div class="user-avatar">NV</div>
+                    <div>
+                        <div style="font-weight: 600; font-size: 0.9rem;">Nguyễn Văn A</div>
+                        <small style="color: var(--secondary); font-size: 0.8rem;">Quản trị viên</small>
+                    </div>
+                    <i class="bi bi-chevron-down" style="color: var(--secondary);"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content Area -->
+        <div class="dashboard-content" id="dashboardContent">
+            <div class="page-header">
+                <h1>Dashboard</h1>
+                <p>Chào mừng trở lại! Đây là tổng quan về hoạt động của công ty</p>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value">1,245</div>
+                            <div class="stat-label">Đơn hàng trong tháng</div>
+                            <div class="stat-change positive">
+                                <i class="bi bi-arrow-up"></i>
+                                <span>12.5% so với tháng trước</span>
+                            </div>
+                        </div>
+                        <div class="stat-icon">
+                            <i class="bi bi-cart-check"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card success">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value">₫2.8B</div>
+                            <div class="stat-label">Doanh thu tháng này</div>
+                            <div class="stat-change positive">
+                                <i class="bi bi-arrow-up"></i>
+                                <span>8.3% tăng trưởng</span>
+                            </div>
+                        </div>
+                        <div class="stat-icon">
+                            <i class="bi bi-currency-dollar"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card warning">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value">156</div>
+                            <div class="stat-label">Sản phẩm đang sản xuất</div>
+                            <div class="stat-change negative">
+                                <i class="bi bi-arrow-down"></i>
+                                <span>3 đơn hàng chậm tiến độ</span>
+                            </div>
+                        </div>
+                        <div class="stat-icon">
+                            <i class="bi bi-gear"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card info">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value">89%</div>
+                            <div class="stat-label">Tỷ lệ hoàn thành đơn hàng</div>
+                            <div class="stat-change positive">
+                                <i class="bi bi-arrow-up"></i>
+                                <span>2.1% cải thiện</span>
+                            </div>
+                        </div>
+                        <div class="stat-icon">
+                            <i class="bi bi-check-circle"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions">
+                <h3 class="section-title">
+                    <i class="bi bi-lightning-charge-fill"></i>
+                    Thao tác nhanh
+                </h3>
+                <div class="actions-grid">
+                    <a href="#new-order" class="action-btn">
+                        <i class="bi bi-plus-circle"></i>
+                        <span>Tạo đơn hàng mới</span>
+                    </a>
+                    <a href="#new-production" class="action-btn">
+                        <i class="bi bi-play-circle"></i>
+                        <span>Bắt đầu sản xuất</span>
+                    </a>
+                    <a href="#inventory-check" class="action-btn">
+                        <i class="bi bi-clipboard-check"></i>
+                        <span>Kiểm kê kho</span>
+                    </a>
+                    <a href="#new-purchase" class="action-btn">
+                        <i class="bi bi-cart-plus"></i>
+                        <span>Đặt mua hàng</span>
+                    </a>
+                    <a href="#quality-check" class="action-btn">
+                        <i class="bi bi-shield-check"></i>
+                        <span>Kiểm tra chất lượng</span>
+                    </a>
+                    <a href="#report" class="action-btn">
+                        <i class="bi bi-file-earmark-text"></i>
+                        <span>Tạo báo cáo</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <!-- Modules Grid -->
+                <div class="col-lg-8">
+                    <div class="quick-actions">
+                        <h3 class="section-title">
+                            <i class="bi bi-grid-3x3-gap"></i>
+                            Các module hệ thống
+                        </h3>
+                        <div class="modules-grid">
+                            <div class="module-card">
+                                <div class="module-icon">
+                                    <i class="bi bi-gear-wide-connected"></i>
+                                </div>
+                                <h5>Quản lý sản xuất</h5>
+                                <p>Theo dõi và quản lý quy trình sản xuất, kế hoạch sản xuất</p>
+                            </div>
+                            <div class="module-card">
+                                <div class="module-icon">
+                                    <i class="bi bi-boxes"></i>
+                                </div>
+                                <h5>Quản lý kho</h5>
+                                <p>Kiểm soát tồn kho, nhập xuất hàng hóa, điều chuyển kho</p>
+                            </div>
+                            <div class="module-card">
+                                <div class="module-icon">
+                                    <i class="bi bi-graph-up-arrow"></i>
+                                </div>
+                                <h5>Bán hàng</h5>
+                                <p>Quản lý đơn hàng, khách hàng, báo giá và hợp đồng</p>
+                            </div>
+                            <div class="module-card">
+                                <div class="module-icon">
+                                    <i class="bi bi-cart-plus"></i>
+                                </div>
+                                <h5>Mua hàng</h5>
+                                <p>Quản lý đơn mua hàng, nhà cung cấp, hợp đồng mua</p>
+                            </div>
+                            <div class="module-card">
+                                <div class="module-icon">
+                                    <i class="bi bi-calculator"></i>
+                                </div>
+                                <h5>Kế toán</h5>
+                                <p>Quản lý tài chính, công nợ, báo cáo tài chính</p>
+                            </div>
+                            <div class="module-card">
+                                <div class="module-icon">
+                                    <i class="bi bi-shield-check"></i>
+                                </div>
+                                <h5>Chất lượng</h5>
+                                <p>Kiểm tra chất lượng sản phẩm, quy trình QC/QA</p>
+                            </div>
+                            <div class="module-card">
+                                <div class="module-icon">
+                                    <i class="bi bi-tools"></i>
+                                </div>
+                                <h5>Bảo trì</h5>
+                                <p>Bảo trì thiết bị, máy móc, lịch bảo dưỡng</p>
+                            </div>
+                            <div class="module-card">
+                                <div class="module-icon">
+                                    <i class="bi bi-people"></i>
+                                </div>
+                                <h5>Nhân sự</h5>
+                                <p>Quản lý nhân viên, chấm công, lương thưởng</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="col-lg-4">
+                    <div class="activity-card">
+                        <h3 class="section-title">
+                            <i class="bi bi-clock-history"></i>
+                            Hoạt động gần đây
+                        </h3>
+                        <div class="activity-item">
+                            <div class="activity-icon success">
+                                <i class="bi bi-check-circle"></i>
+                            </div>
+                            <div class="activity-content">
+                                <h6>Hoàn thành đơn hàng #1234</h6>
+                                <p>Đơn hàng đã được giao thành công</p>
+                                <div class="activity-time">5 phút trước</div>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon info">
+                                <i class="bi bi-info-circle"></i>
+                            </div>
+                            <div class="activity-content">
+                                <h6>Cảnh báo tồn kho thấp</h6>
+                                <p>Nguyên liệu A sắp hết, cần nhập thêm</p>
+                                <div class="activity-time">15 phút trước</div>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon warning">
+                                <i class="bi bi-exclamation-triangle"></i>
+                            </div>
+                            <div class="activity-content">
+                                <h6>Đơn hàng chậm tiến độ</h6>
+                                <p>Đơn hàng #1230 cần được xử lý gấp</p>
+                                <div class="activity-time">1 giờ trước</div>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon success">
+                                <i class="bi bi-check-circle"></i>
+                            </div>
+                            <div class="activity-content">
+                                <h6>Nhập kho thành công</h6>
+                                <p>Đã nhập 500 sản phẩm vào kho A</p>
+                                <div class="activity-time">2 giờ trước</div>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon info">
+                                <i class="bi bi-person-plus"></i>
+                            </div>
+                            <div class="activity-content">
+                                <h6>Thêm người dùng mới</h6>
+                                <p>Nguyễn Văn B đã được thêm vào hệ thống</p>
+                                <div class="activity-time">3 giờ trước</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module Container (loads modules like MPS inside main-content) -->
+        <div id="moduleContainer" style="display:none; width:100%;">
+            <iframe id="moduleFrame" title="Module Frame"
+                style="width:100%; min-height:calc(100vh - 140px); border:0; border-radius: 12px; background:#fff;"></iframe>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Sidebar (pinned by default)
+        const sidebar = document.getElementById('sidebar');
+        let sidebarPinned = true;
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768) {
+                if (!sidebar.contains(e.target) && !sidebarToggle.contains(e.target)) {
+                    sidebar.classList.remove('show');
+                }
+            }
+        });
+
+        // Menu item active state & module loading
+        const menuItems = document.querySelectorAll('.menu-item');
+        menuItems.forEach(item => {
+            item.addEventListener('click', (e) => {
+                const href = item.getAttribute('href') || '';
+                const src = item.getAttribute('data-src') || '';
+
+                // If menu item points to an embedded module (e.g., MPS)
+                if (src) {
+                    e.preventDefault();
+                    menuItems.forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    const dashboard = document.getElementById('dashboardContent');
+                    const moduleContainer = document.getElementById('moduleContainer');
+                    const frame = document.getElementById('moduleFrame');
+                    if (dashboard) dashboard.style.display = 'none';
+                    if (moduleContainer) moduleContainer.style.display = 'block';
+                    if (frame) frame.src = src;
+                    return;
+                }
+
+                // Allow real navigation for absolute/internal links (e.g., MPS module)
+                if (href.startsWith('/modules/')) {
+                    return; // let browser navigate
+                }
+                // Keep single-page behavior for hash sections
+                if (href.startsWith('#')) {
+                    e.preventDefault();
+                    const target = document.querySelector(href);
+                    menuItems.forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    if (target) target.scrollIntoView({ behavior: 'smooth' });
+                    return;
+                }
+                // Fallback: prevent default for other placeholders
+                e.preventDefault();
+                menuItems.forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+            });
+        });
+
+        // Module cards click (placeholder)
+        const moduleCards = document.querySelectorAll('.module-card');
+        moduleCards.forEach(card => {
+            card.addEventListener('click', () => {
+                // Add your navigation logic here
+                console.log('Module clicked:', card.querySelector('h5').textContent);
+            });
+        });
+
+        // Action buttons
+        const actionBtns = document.querySelectorAll('.action-btn');
+        actionBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                // Add your action logic here
+                console.log('Action clicked:', btn.querySelector('span').textContent);
+            });
+        });
+
+        // Animate stats on load
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('fade-in-up');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.stat-card, .module-card, .activity-item').forEach(el => {
+            observer.observe(el);
+        });
+
+        // Search functionality
+        const searchInput = document.querySelector('.search-box input');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                // Add search logic here
+                console.log('Searching for:', searchTerm);
+            });
+        }
+
+        // Notification click
+        const notificationIcon = document.querySelector('.notification-icon');
+        if (notificationIcon) {
+            notificationIcon.addEventListener('click', () => {
+                // Add notification dropdown logic here
+                alert('Bạn có 5 thông báo mới!');
+            });
+        }
+    </script>
+</body>
+
+</html>

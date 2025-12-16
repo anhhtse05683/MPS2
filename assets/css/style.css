@@ -1,0 +1,111 @@
+:root {
+  --primary: #0d6efd;
+  --accent: #2cc0ff;
+  --soft-bg: #f4f7fb;
+  --text: #1a2433;
+}
+
+body {
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  background: white;
+  scroll-behavior: smooth;
+}
+
+.navbar {
+  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+}
+
+.hero {
+  background: radial-gradient(circle at 20% 20%, #e8f2ff 0, #f9fbff 35%, #fff 70%);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 80% 20%, rgba(44, 192, 255, 0.15), transparent 40%),
+      radial-gradient(circle at 30% 80%, rgba(13, 110, 253, 0.12), transparent 40%);
+  pointer-events: none;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(13, 110, 253, 0.08);
+  color: #0a58ca;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.feature-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #e8f2ff, #d8ebff);
+  color: #0d6efd;
+  font-size: 1.4rem;
+  box-shadow: 0 10px 35px rgba(13, 110, 253, 0.18);
+}
+
+.card-custom {
+  border: none;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.05);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.card-custom:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 50px rgba(13, 110, 253, 0.12);
+}
+
+.stat-card {
+  background: linear-gradient(145deg, #0d6efd, #2cc0ff);
+  color: white;
+  border-radius: 18px;
+  box-shadow: 0 16px 45px rgba(13, 110, 253, 0.25);
+}
+
+.section-light {
+  background: var(--soft-bg);
+}
+
+.product-badge {
+  background: rgba(13, 110, 253, 0.1);
+  color: #0d6efd;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.cta {
+  background: linear-gradient(120deg, #0d6efd, #2cc0ff);
+  color: white;
+  border: none;
+  border-radius: 14px;
+  box-shadow: 0 15px 40px rgba(13, 110, 253, 0.35);
+  padding: 14px 22px;
+  font-weight: 700;
+}
+
+.cta:hover {
+  filter: brightness(1.05);
+  color: white;
+}
+
+footer {
+  background: #0b1a2f;
+  color: #dfe9ff;
+}

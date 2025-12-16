@@ -1,0 +1,23 @@
+{
+  "name": "mps-app",
+  "version": "1.0.0",
+  "description": "Material Planning Schedule (MPS) with Express + SQL Server + Bootstrap frontend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "lint": "echo \"No lint configured\"",
+    "format": "echo \"No formatter configured\""
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mssql": "^12.2.0",
+    "multer": "^2.0.2",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

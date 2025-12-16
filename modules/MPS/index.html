@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Material Planning Schedule</title>
+    <link rel="stylesheet" href="/modules/MPS/assets/css/mps.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+</head>
+
+<body class="p-3 p-lg-4">
+    <div class="container-fluid">
+        <div class="gradient-bar mb-3 d-flex flex-wrap align-items-center gap-3 justify-content-between">
+            <div>
+                <h4 class="mb-0">Material Planning Schedule (MPS)</h4>
+                <small>Quan sát nhanh tồn kho dự kiến theo tuần</small>
+            </div>
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+                <span class="fw-semibold">Module:</span>
+                <span class="badge bg-primary">MPS</span>
+                <span class="badge bg-success">Production</span>
+                <span class="badge bg-info text-dark">Purchase</span>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-xl-9">
+                <div class="form-section">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-6 col-md-2">
+                            <label class="form-label">Từ tuần</label>
+                            <input id="startWeek" type="number" min="1" max="53" class="form-control" value="47">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label">Năm</label>
+                            <input id="startYear" type="number" class="form-control" value="2025">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label">Đến tuần</label>
+                            <input id="endWeek" type="number" min="1" max="53" class="form-control" value="53">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label">Năm</label>
+                            <input id="endYear" type="number" class="form-control" value="2025">
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Chọn sản phẩm</label>
+                            <select id="productSelect" class="form-select"></select>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+                        <div class="d-flex gap-3 align-items-center flex-wrap">
+                            <div>
+                                <label class="form-label mb-0 small">Balance tuần đầu (Product)</label>
+                                <input id="productOpeningValue" type="number" class="form-control form-control-sm"
+                                    value="20">
+                            </div>
+                            <div>
+                                <label class="form-label mb-0 small">Tuần</label>
+                                <input id="productOpeningWeek" type="number" min="1" max="53"
+                                    class="form-control form-control-sm" value="47">
+                            </div>
+                            <div>
+                                <label class="form-label mb-0 small">Năm</label>
+                                <input id="productOpeningYear" type="number" class="form-control form-control-sm"
+                                    value="2025">
+                            </div>
+                        </div>
+                        <button id="applyView" class="btn btn-primary">Xem lịch</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-xl-3">
+                <div class="form-section h-100">
+                    <h6 class="mb-2">Ghi chú nhanh</h6>
+                    <ul class="mb-2 small">
+                        <li>SHIP_QTY nhập tay; Pro_QTY lấy từ Production (ACTIVE/COMPLETE).</li>
+                        <li>Balance tuần khởi tạo giữ nguyên, tuần sau: prev - ship + pro.</li>
+                        <li>Stock_in lấy từ Purchase đã CONFIRM; Stock_out = Pro * BOM.</li>
+                        <li>Balance NVL: prev - stock_out + stock_in.</li>
+                    </ul>
+                    <span class="badge bg-warning text-dark">Tuần trước khởi tạo hiển thị 0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <h5 class="mb-0">Product Table</h5>
+                <div class="small text-muted">Nhập SHIP_QTY để tính tức thời</div>
+            </div>
+            <div id="productTableWrapper" class="table-responsive table-sticky">
+                <table class="table table-bordered align-middle">
+                    <thead>
+                        <tr id="productHeader">
+                            <th class="text-center">Product Name</th>
+                            <th class="text-center">Item</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <h5 class="mb-0">Material Table</h5>
+                <div class="small text-muted">Tính theo BOM và phiếu mua CONFIRM</div>
+            </div>
+            <div id="materialTableWrapper" class="table-responsive table-sticky">
+                <table class="table table-bordered align-middle">
+                    <!-- <thead> -->
+                    <tr id="materialHeader" class="test">
+                        <th class="text-center">Material Code</th>
+                        <th class="text-center">Item</th>
+                    </tr>
+                    <!-- </thead> -->
+                    <tbody id="materialBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ------------------ API + State ------------------
+        const API_BASE = "";
+        let state = {
+            products: [],
+            materials: [],
+            productOpening: null,
+            materialOpenings: {}, // materialId -> {week, year, balance}
+            salesPlans: {}, // key -> qty
+            production: {}, // key -> qty for selected product
+            purchase: {} // materialId -> { key -> qty }
+        };
+        let pendingShipChanges = {};
+        let saveShipTimer = null;
+
+        // ------------------ Helpers ------------------
+        const weekKey = (week, year) => `${year}-W${String(week).padStart(2, "0")}`;
+
+        async function fetchJson(url, options = {}) {
+            const res = await fetch(API_BASE + url, {
+                headers: { "Content-Type": "application/json" },
+                ...options
+            });
+            if (!res.ok) throw new Error(await res.text() || res.statusText);
+            if (res.status === 204) return null;
+            return res.json();
+        }
+
+        function generateWeeks(startYear, startWeek, endYear, endWeek) {
+            const weeks = [];
+            let y = Number(startYear);
+            let w = Number(startWeek);
+            const safeGuard = 400; // avoid infinite loop
+            let steps = 0;
+            while (y < Number(endYear) || (y === Number(endYear) && w <= Number(endWeek))) {
+                weeks.push({ week: w, year: y, label: `W${w}-${y}` });
+                w += 1;
+                if (w > 53) { // handle leap week if any, else reset at 53
+                    w = 1;
+                    y += 1;
+                }
+                steps += 1;
+                if (steps > safeGuard) break;
+            }
+            return weeks;
+        }
+
+        function isSameWeek(week, year, target) {
+            return target && target.week === week && target.year === year;
+        }
+
+        function formatNumber(value) {
+            return Number(value || 0).toLocaleString("vi-VN", { minimumFractionDigits: 0 });
+        }
+
+        // ------------------ Data mapping ------------------
+        function mapProduction(records) {
+            const map = {};
+            records.forEach(r => {
+                map[weekKey(r.week, r.year)] = Number(r.qty || 0);
+            });
+            return map;
+        }
+
+        function mapPurchase(records) {
+            const map = {};
+            records.forEach(r => {
+                const key = weekKey(r.week, r.year);
+                if (!map[r.materialId]) map[r.materialId] = {};
+                map[r.materialId][key] = Number((map[r.materialId][key] || 0) + (r.qty || 0));
+            });
+            return map;
+        }
+
+        function mapSalesPlans(records) {
+            const map = {};
+            records.forEach(r => {
+                map[weekKey(r.week, r.year)] = Number(r.qty || 0);
+            });
+            return map;
+        }
+
+        // ------------------ Calculations ------------------
+        function calculateProductRows(productId, weeks, userShip, productionMap) {
+            const opening = state.productOpening;
+            let prevBalance = 0;
+            let openingApplied = false;
+            const rows = { ship: [], pro: [], balance: [] };
+
+            weeks.forEach(({ week, year }) => {
+                const shipQty = Number(userShip[weekKey(week, year)] || 0);
+                const proQty = Number(productionMap[weekKey(week, year)] || 0);
+                const isAfterOpening = opening && (year > opening.year || (year === opening.year && week > opening.week));
+
+                if (isSameWeek(week, year, opening)) {
+                    prevBalance = opening.balance;
+                    openingApplied = true;
+                    rows.balance.push(opening.balance);
+                } else if (isAfterOpening || (opening && openingApplied)) {
+                    if (opening && !openingApplied) {
+                        prevBalance = opening.balance;
+                        openingApplied = true;
+                    }
+                    const currentBalance = prevBalance - shipQty + proQty;
+                    rows.balance.push(currentBalance);
+                    prevBalance = currentBalance;
+                } else {
+                    rows.balance.push(0);
+                    prevBalance = 0;
+                }
+                rows.ship.push(shipQty);
+                rows.pro.push(proQty);
+            });
+
+            return rows;
+        }
+
+        function calculateMaterialRows(productId, weeks, productionMap) {
+            return state.materials.map(mat => {
+                const opening = state.materialOpenings[mat.id] || null;
+                let prevBalance = 0;
+                let openingApplied = false;
+                const stockIn = [];
+                const stockOut = [];
+                const balance = [];
+
+                weeks.forEach(({ week, year }) => {
+                    const proQty = Number(productionMap[weekKey(week, year)] || 0);
+                    const outQty = proQty * mat.consume;
+                    const inQty = Number((state.purchase[mat.id] && state.purchase[mat.id][weekKey(week, year)]) || 0);
+                    const isAfterOpening = opening && (year > opening.year || (year === opening.year && week > opening.week));
+
+                    if (isSameWeek(week, year, opening)) {
+                        prevBalance = opening.balance;
+                        openingApplied = true;
+                        balance.push(opening.balance);
+                    } else if (isAfterOpening || (opening && openingApplied)) {
+                        if (opening && !openingApplied) {
+                            prevBalance = opening.balance;
+                            openingApplied = true;
+                        }
+                        const cur = prevBalance - outQty + inQty;
+                        balance.push(cur);
+                        prevBalance = cur;
+                    } else {
+                        balance.push(0);
+                        prevBalance = 0;
+                    }
+                    stockIn.push(inQty);
+                    stockOut.push(outQty);
+                });
+
+                return { material: mat, stockIn, stockOut, balance };
+            });
+        }
+
+        // ------------------ Rendering ------------------
+        function renderHeaders(weeks, headerEl) {
+            headerEl.innerHTML = "";
+            const staticCols = headerEl.id === "productHeader"
+                ? ["Product Code", "Item"]
+                : ["Material Code", "Item"];
+            staticCols.forEach(text => {
+                const th = document.createElement("th");
+                th.className = "text-center";
+                th.textContent = text;
+                headerEl.appendChild(th);
+            });
+            weeks.forEach(w => {
+                const th = document.createElement("th");
+                th.className = "text-center week-col";
+                th.textContent = w.label;
+                headerEl.appendChild(th);
+            });
+        }
+
+        function renderProductTable(product, weeks, rows) {
+            const body = document.getElementById("productBody");
+            body.innerHTML = "";
+
+            const items = [
+                { label: "SHIP_QTY", values: rows.ship, type: "input" },
+                { label: "Pro_QTY", values: rows.pro },
+                { label: "Balance", values: rows.balance, highlightNegative: true }
+            ];
+
+            items.forEach(item => {
+                const tr = document.createElement("tr");
+                const nameTd = document.createElement("td");
+                nameTd.textContent = product.code;
+                nameTd.className = "fw-semibold text-center";
+                tr.appendChild(nameTd);
+
+                const itemTd = document.createElement("td");
+                itemTd.textContent = item.label;
+                itemTd.className = "text-center item-col";
+                tr.appendChild(itemTd);
+
+                item.values.forEach((val, idx) => {
+                    const td = document.createElement("td");
+                    td.className = "text-center week-col";
+                    if (item.type === "input") {
+                        const input = document.createElement("input");
+                        input.type = "number";
+                        input.className = "form-control form-control-sm text-center";
+                        input.value = val;
+                        input.dataset.week = weeks[idx].week;
+                        input.dataset.year = weeks[idx].year;
+                        input.addEventListener("change", onShipQtyChange);
+                        td.appendChild(input);
+                    } else {
+                        td.textContent = formatNumber(val);
+                        if (item.highlightNegative && val < 0) td.classList.add("text-negative");
+                    }
+                    tr.appendChild(td);
+                });
+                body.appendChild(tr);
+            });
+        }
+
+        function renderMaterialTable(materialRows, weeks) {
+            const body = document.getElementById("materialBody");
+            body.innerHTML = "";
+            materialRows.forEach(row => {
+                const items = [
+                    { label: "Stock_In_Qty", values: row.stockIn },
+                    { label: "Stock_Out_Qty", values: row.stockOut },
+                    { label: "Balance", values: row.balance, highlightNegative: true, secondary: true }
+                ];
+                items.forEach((item, itemIdx) => {
+                    const tr = document.createElement("tr");
+                    if (itemIdx === 0) {
+                        const nameTd = document.createElement("td");
+                        nameTd.rowSpan = 3;
+                        nameTd.className = "fw-semibold text-center align-middle";
+                        nameTd.textContent = row.material.code;
+                        tr.appendChild(nameTd);
+                    }
+                    const itemTd = document.createElement("td");
+                    itemTd.textContent = item.label;
+                    itemTd.className = "text-center item-col";
+                    tr.appendChild(itemTd);
+
+                    item.values.forEach((val) => {
+                        const td = document.createElement("td");
+                        td.className = "text-center week-col";
+                        td.textContent = formatNumber(val);
+                        if (item.highlightNegative && val < 0) td.classList.add("text-negative");
+                        tr.appendChild(td);
+                    });
+                    if (item.secondary) tr.classList.add("table-secondary-row");
+                    body.appendChild(tr);
+                });
+            });
+        }
+
+        function updateOpeningInputs() {
+            const open = state.productOpening;
+            if (open) {
+                document.getElementById("productOpeningWeek").value = open.week;
+                document.getElementById("productOpeningYear").value = open.year;
+                document.getElementById("productOpeningValue").value = open.balance;
+            }
+        }
+
+        // ------------------ Events ------------------
+        function onShipQtyChange(e) {
+            const week = Number(e.target.dataset.week);
+            const year = Number(e.target.dataset.year);
+            const key = weekKey(week, year);
+            state.salesPlans[key] = Number(e.target.value || 0);
+            pendingShipChanges[key] = state.salesPlans[key];
+            renderAll(); // re-render immediately
+            scheduleSaveShipPlans();
+        }
+
+        function scheduleSaveShipPlans() {
+            if (saveShipTimer) clearTimeout(saveShipTimer);
+            saveShipTimer = setTimeout(async () => {
+                const productId = Number(document.getElementById("productSelect").value);
+                const plans = Object.entries(pendingShipChanges).map(([k, qty]) => {
+                    const [yearStr, weekStr] = k.split("-W");
+                    return { year: Number(yearStr), week: Number(weekStr), qty: Number(qty || 0) };
+                });
+                if (!plans.length) return;
+                try {
+                    await fetchJson("/api/sales-plan", {
+                        method: "PUT",
+                        body: JSON.stringify({ productId, plans })
+                    });
+                    pendingShipChanges = {};
+                } catch (err) {
+                    console.error("Save SHIP_QTY failed", err);
+                }
+            }, 600);
+        }
+
+        async function onApplyView() {
+            const productId = Number(document.getElementById("productSelect").value);
+            const openingWeek = Number(document.getElementById("productOpeningWeek").value);
+            const openingYear = Number(document.getElementById("productOpeningYear").value);
+            const openingValue = Number(document.getElementById("productOpeningValue").value);
+            try {
+                await fetchJson("/api/opening-balance", {
+                    method: "PUT",
+                    body: JSON.stringify({
+                        itemType: "P",
+                        itemId: productId,
+                        startWeek: openingWeek,
+                        startYear: openingYear,
+                        balanceQty: openingValue
+                    })
+                });
+                await loadDataAndRender(); // refresh
+            } catch (err) {
+                console.error(err);
+                alert("Không lưu được tồn kho ban đầu");
+            }
+        }
+
+        // ------------------ Data loading ------------------
+        async function loadProducts() {
+            state.products = await fetchJson("/api/products");
+            const select = document.getElementById("productSelect");
+            select.innerHTML = "";
+            state.products.forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p.id;
+                opt.textContent = `${p.code} - ${p.name}`;
+                select.appendChild(opt);
+            });
+        }
+
+        async function loadDataForProduct(productId) {
+            pendingShipChanges = {};
+            const startWeek = Number(document.getElementById("startWeek").value);
+            const startYear = Number(document.getElementById("startYear").value);
+            const endWeek = Number(document.getElementById("endWeek").value);
+            const endYear = Number(document.getElementById("endYear").value);
+
+            // materials + product opening + sales plan + production in parallel
+            const [materials, productOpening, salesPlans, production] = await Promise.all([
+                fetchJson(`/api/materials?productId=${productId}`),
+                fetchJson(`/api/opening-balance/product/${productId}`),
+                fetchJson(`/api/sales-plan?productId=${productId}&fromYear=${startYear}&fromWeek=${startWeek}&toYear=${endYear}&toWeek=${endWeek}`),
+                fetchJson(`/api/production?productId=${productId}&fromYear=${startYear}&fromWeek=${startWeek}&toYear=${endYear}&toWeek=${endWeek}`)
+            ]);
+
+            state.materials = materials;
+            state.productOpening = productOpening ? { week: productOpening.week, year: productOpening.year, balance: Number(productOpening.balance) } : null;
+            state.salesPlans = mapSalesPlans(salesPlans || []);
+            state.production = mapProduction(production || []);
+            console.log('[MPS] Production data loaded:', production);
+            console.log('[MPS] Production map:', state.production);
+
+            // material openings
+            const openings = {};
+            await Promise.all(
+                materials.map(async (m) => {
+                    const ob = await fetchJson(`/api/opening-balance/material/${m.id}`);
+                    if (ob) openings[m.id] = { week: ob.week, year: ob.year, balance: Number(ob.balance) };
+                })
+            );
+            state.materialOpenings = openings;
+
+            // purchase for range (all materials) then filter
+            const purchase = await fetchJson(`/api/purchase?fromYear=${startYear}&fromWeek=${startWeek}&toYear=${endYear}&toWeek=${endWeek}`);
+            state.purchase = mapPurchase(purchase || []);
+
+            updateOpeningInputs();
+        }
+
+        // ------------------ Render orchestrator ------------------
+        function renderAll() {
+            const startWeek = Number(document.getElementById("startWeek").value);
+            const startYear = Number(document.getElementById("startYear").value);
+            const endWeek = Number(document.getElementById("endWeek").value);
+            const endYear = Number(document.getElementById("endYear").value);
+            const productId = Number(document.getElementById("productSelect").value);
+            const product = state.products.find(p => p.id === productId);
+            if (!product) return;
+
+            const weeks = generateWeeks(startYear, startWeek, endYear, endWeek);
+            renderHeaders(weeks, document.getElementById("productHeader"));
+            renderHeaders(weeks, document.getElementById("materialHeader"));
+
+            const productRows = calculateProductRows(productId, weeks, state.salesPlans, state.production);
+            renderProductTable(product, weeks, productRows);
+
+            const materialRows = calculateMaterialRows(productId, weeks, state.production);
+            renderMaterialTable(materialRows, weeks);
+        }
+
+        async function loadDataAndRender() {
+            const productId = Number(document.getElementById("productSelect").value);
+            if (!productId) return;
+            await loadDataForProduct(productId);
+            renderAll();
+        }
+
+        // ------------------ Init ------------------
+        function initScrollSync() {
+            const productWrap = document.getElementById("productTableWrapper");
+            const materialWrap = document.getElementById("materialTableWrapper");
+            let syncing = false;
+            const linkScroll = (source, target) => {
+                source.addEventListener("scroll", () => {
+                    if (syncing) return;
+                    syncing = true;
+                    target.scrollLeft = source.scrollLeft;
+                    syncing = false;
+                });
+            };
+            if (productWrap && materialWrap) {
+                linkScroll(productWrap, materialWrap);
+                linkScroll(materialWrap, productWrap);
+            }
+        }
+
+        async function init() {
+            await loadProducts();
+            document.getElementById("applyView").addEventListener("click", onApplyView);
+            document.getElementById("productSelect").addEventListener("change", loadDataAndRender);
+            initScrollSync();
+            await loadDataAndRender();
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            init().catch(err => {
+                console.error(err);
+                alert("Không tải được dữ liệu khởi động");
+            });
+        });
+    </script>
+</body>
+
+</html>

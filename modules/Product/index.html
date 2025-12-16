@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Sản phẩm</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: #f8fafc;
+            padding: 1.5rem;
+        }
+
+        .card {
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+            border: none;
+        }
+
+        .badge-type {
+            font-size: 0.75rem;
+        }
+
+        .table thead {
+            background: #f1f5f9;
+        }
+
+        .table thead th {
+            border-bottom-width: 1px;
+        }
+
+        .image-thumb {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            object-fit: cover;
+            background: #e2e8f0;
+        }
+
+        .toolbar {
+            gap: 0.5rem;
+        }
+
+        .badge-opening {
+            font-size: 0.7rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div>
+                    <h4 class="mb-0">Quản lý Sản phẩm / Nguyên vật liệu</h4>
+                    <small class="text-muted">Tạo, chỉnh sửa, cấu hình tồn kho ban đầu cho Product & Material</small>
+                </div>
+                <div class="d-flex toolbar align-items-center flex-wrap">
+                    <select id="filterType" class="form-select form-select-sm">
+                        <option value="">Tất cả loại</option>
+                        <option value="P">Product (Thành phẩm)</option>
+                        <option value="M">Material (Nguyên vật liệu)</option>
+                    </select>
+                    <input id="searchInput" type="text" class="form-control form-control-sm"
+                        placeholder="Tìm mã / tên...">
+                    <button id="btnImport" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-file-earmark-excel"></i> Import Excel
+                    </button>
+                    <button id="btnAdd" class="btn btn-primary btn-sm">
+                        <i class="bi bi-plus-lg"></i> Thêm sản phẩm
+                    </button>
+                    <input id="fileImport" type="file" accept=".xlsx,.xls" class="d-none">
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Loại</th>
+                            <th>Mã</th>
+                            <th>Tên</th>
+                            <th>Ảnh</th>
+                            <th>Opening Week</th>
+                            <th>Opening Year</th>
+                            <th>Opening Balance</th>
+                            <th class="text-end">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemsBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Add/Edit -->
+    <div class="modal fade" id="itemModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="itemModalTitle">Thêm sản phẩm</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="itemForm" class="row g-3">
+                        <input type="hidden" id="itemId">
+                        <input type="hidden" id="itemTypeHidden">
+
+                        <div class="col-md-3">
+                            <label class="form-label">Loại</label>
+                            <select id="itemType" class="form-select" required>
+                                <option value="P">Product (Thành phẩm)</option>
+                                <option value="M">Material (Nguyên vật liệu)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Mã</label>
+                            <input id="itemCode" type="text" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Tên</label>
+                            <input id="itemName" type="text" class="form-control" required>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Ảnh (URL)</label>
+                            <input id="itemImageUrl" type="text" class="form-control"
+                                placeholder="Dán link ảnh sản phẩm (tùy chọn)">
+                        </div>
+                        <div class="col-md-4 d-flex flex-column align-items-center justify-content-center">
+                            <img id="previewImage" src="" alt="Preview" class="image-thumb mb-2 d-none">
+                            <small class="text-muted">Xem trước ảnh</small>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Opening Week</label>
+                            <input id="openWeek" type="number" min="1" max="53" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Opening Year</label>
+                            <input id="openYear" type="number" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Opening Balance</label>
+                            <input id="openBalance" type="number" step="0.01" class="form-control">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <small class="text-muted">Nếu để trống, item sẽ chưa có tồn kho ban đầu.</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" id="btnSaveItem" class="btn btn-primary">Lưu</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API_BASE = "";
+        let items = [];
+        let currentEditing = null;
+
+        function typeLabel(t) {
+            return t === 'M' ? 'Material' : 'Product';
+        }
+
+        function typeBadgeClass(t) {
+            return t === 'M' ? 'bg-info text-dark' : 'bg-primary';
+        }
+
+        async function fetchItems() {
+            const q = document.getElementById('searchInput').value.trim();
+            const type = document.getElementById('filterType').value;
+            const params = new URLSearchParams();
+            if (q) params.append('q', q);
+            if (type) params.append('type', type);
+            const res = await fetch(API_BASE + '/api/items?' + params.toString());
+            if (!res.ok) throw new Error(await res.text());
+            items = await res.json();
+            renderTable();
+        }
+
+        function renderTable() {
+            const body = document.getElementById('itemsBody');
+            body.innerHTML = '';
+            if (!items.length) {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = 8;
+                td.className = 'text-center text-muted py-4';
+                td.textContent = 'Chưa có dữ liệu. Hãy thêm sản phẩm mới hoặc import từ Excel.';
+                tr.appendChild(td);
+                body.appendChild(tr);
+                return;
+            }
+            items.forEach(it => {
+                const tr = document.createElement('tr');
+
+                const typeTd = document.createElement('td');
+                typeTd.innerHTML = `<span class="badge badge-type ${typeBadgeClass(it.itemType)}">${typeLabel(it.itemType)}</span>`;
+                tr.appendChild(typeTd);
+
+                const codeTd = document.createElement('td');
+                codeTd.textContent = it.code;
+                tr.appendChild(codeTd);
+
+                const nameTd = document.createElement('td');
+                nameTd.textContent = it.name;
+                tr.appendChild(nameTd);
+
+                const imgTd = document.createElement('td');
+                if (it.ImageUrl) {
+                    const img = document.createElement('img');
+                    img.src = it.ImageUrl;
+                    img.className = 'image-thumb';
+                    imgTd.appendChild(img);
+                } else {
+                    imgTd.innerHTML = '<span class="text-muted small">Không có</span>';
+                }
+                tr.appendChild(imgTd);
+
+                const weekTd = document.createElement('td');
+                weekTd.textContent = it.StartWeek ?? '';
+                tr.appendChild(weekTd);
+
+                const yearTd = document.createElement('td');
+                yearTd.textContent = it.StartYear ?? '';
+                tr.appendChild(yearTd);
+
+                const balTd = document.createElement('td');
+                if (it.BalanceQty != null) {
+                    balTd.innerHTML = `<span class="badge bg-light text-dark badge-opening">${Number(it.BalanceQty).toLocaleString('vi-VN')}</span>`;
+                } else {
+                    balTd.innerHTML = '<span class="text-muted small">Chưa cấu hình</span>';
+                }
+                tr.appendChild(balTd);
+
+                const actionTd = document.createElement('td');
+                actionTd.className = 'text-end';
+                actionTd.innerHTML = `
+                    <button class="btn btn-sm btn-outline-primary me-1">Sửa</button>
+                    <button class="btn btn-sm btn-outline-danger">Xóa</button>
+                `;
+                const [editBtn, delBtn] = actionTd.querySelectorAll('button');
+                editBtn.addEventListener('click', () => openEditModal(it));
+                delBtn.addEventListener('click', () => onDeleteItem(it));
+                tr.appendChild(actionTd);
+
+                body.appendChild(tr);
+            });
+        }
+
+        function resetForm() {
+            currentEditing = null;
+            document.getElementById('itemId').value = '';
+            document.getElementById('itemTypeHidden').value = '';
+            document.getElementById('itemType').value = 'P';
+            document.getElementById('itemCode').value = '';
+            document.getElementById('itemName').value = '';
+            document.getElementById('itemImageUrl').value = '';
+            document.getElementById('openWeek').value = '';
+            document.getElementById('openYear').value = '';
+            document.getElementById('openBalance').value = '';
+            const img = document.getElementById('previewImage');
+            img.src = '';
+            img.classList.add('d-none');
+        }
+
+        function openAddModal() {
+            resetForm();
+            document.getElementById('itemModalTitle').textContent = 'Thêm sản phẩm';
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('itemModal'));
+            modal.show();
+        }
+
+        function openEditModal(it) {
+            resetForm();
+            currentEditing = it;
+            document.getElementById('itemModalTitle').textContent = 'Chỉnh sửa sản phẩm';
+            document.getElementById('itemId').value = it.id;
+            document.getElementById('itemTypeHidden').value = it.itemType;
+            document.getElementById('itemType').value = it.itemType;
+            document.getElementById('itemCode').value = it.code;
+            document.getElementById('itemName').value = it.name;
+            document.getElementById('itemImageUrl').value = it.ImageUrl || '';
+            document.getElementById('openWeek').value = it.StartWeek ?? '';
+            document.getElementById('openYear').value = it.StartYear ?? '';
+            document.getElementById('openBalance').value = it.BalanceQty ?? '';
+            if (it.ImageUrl) {
+                const img = document.getElementById('previewImage');
+                img.src = it.ImageUrl;
+                img.classList.remove('d-none');
+            }
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('itemModal'));
+            modal.show();
+        }
+
+        async function onSaveItem() {
+            const id = document.getElementById('itemId').value;
+            const explicitType = document.getElementById('itemTypeHidden').value;
+            const formType = document.getElementById('itemType').value;
+            const type = id ? (explicitType || formType) : formType;
+            const code = document.getElementById('itemCode').value.trim();
+            const name = document.getElementById('itemName').value.trim();
+            const imageUrl = document.getElementById('itemImageUrl').value.trim();
+            const openWeek = document.getElementById('openWeek').value;
+            const openYear = document.getElementById('openYear').value;
+            const openBalance = document.getElementById('openBalance').value;
+
+            if (!code || !name) {
+                alert('Vui lòng nhập mã và tên.');
+                return;
+            }
+
+            const payload = {
+                type,
+                code,
+                name,
+                imageUrl: imageUrl || null,
+                openingWeek: openWeek ? Number(openWeek) : null,
+                openingYear: openYear ? Number(openYear) : null,
+                openingBalance: openBalance !== '' ? Number(openBalance) : null
+            };
+
+            try {
+                const url = id
+                    ? `/api/items/${encodeURIComponent(type)}/${encodeURIComponent(id)}`
+                    : '/api/items';
+                const method = id ? 'PUT' : 'POST';
+                const res = await fetch(API_BASE + url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) throw new Error(await res.text());
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('itemModal')).hide();
+                await fetchItems();
+            } catch (err) {
+                console.error(err);
+                alert('Lưu sản phẩm thất bại.');
+            }
+        }
+
+        async function onDeleteItem(it) {
+            if (!confirm(`Xóa ${typeLabel(it.itemType)} ${it.code}?`)) return;
+            try {
+                const res = await fetch(API_BASE + `/api/items/${it.itemType}/${it.id}`, {
+                    method: 'DELETE'
+                });
+                if (!res.ok) throw new Error(await res.text());
+                await fetchItems();
+            } catch (err) {
+                console.error(err);
+                alert('Xóa thất bại.');
+            }
+        }
+
+        function setupImagePreview() {
+            const input = document.getElementById('itemImageUrl');
+            const img = document.getElementById('previewImage');
+            input.addEventListener('input', () => {
+                const url = input.value.trim();
+                if (!url) {
+                    img.src = '';
+                    img.classList.add('d-none');
+                    return;
+                }
+                img.src = url;
+                img.classList.remove('d-none');
+            });
+        }
+
+        function setupImport() {
+            const fileInput = document.getElementById('fileImport');
+            document.getElementById('btnImport').addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', async () => {
+                if (!fileInput.files.length) return;
+                const form = new FormData();
+                form.append('file', fileInput.files[0]);
+                try {
+                    const res = await fetch(API_BASE + '/api/items/import', {
+                        method: 'POST',
+                        body: form
+                    });
+                    if (!res.ok) throw new Error(await res.text());
+                    fileInput.value = '';
+                    await fetchItems();
+                } catch (err) {
+                    console.error(err);
+                    alert('Import Excel thất bại.');
+                }
+            });
+        }
+
+        function init() {
+            document.getElementById('btnAdd').addEventListener('click', openAddModal);
+            document.getElementById('btnSaveItem').addEventListener('click', onSaveItem);
+            document.getElementById('searchInput').addEventListener('input', () => {
+                clearTimeout(window.__itemSearchTimer);
+                window.__itemSearchTimer = setTimeout(fetchItems, 300);
+            });
+            document.getElementById('filterType').addEventListener('change', fetchItems);
+            setupImagePreview();
+            setupImport();
+            fetchItems().catch(err => {
+                console.error(err);
+                alert('Không tải được danh sách sản phẩm.');
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+
+</html>

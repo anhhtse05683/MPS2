@@ -1,0 +1,96 @@
+body {
+  background: #f6f7fb;
+}
+
+.gradient-bar {
+  background: linear-gradient(90deg, #c9b6ff 0%, #b6c9ff 100%);
+  border-radius: 12px;
+  padding: 14px 18px;
+  color: #1f1f2e;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+}
+
+.table-sticky thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.table thead {
+  background: #f8e825;
+}
+
+.table-secondary-row {
+  background: #fcf4d9 !important;
+}
+
+.text-negative {
+  color: #e0004d !important;
+  font-weight: 600;
+}
+
+.week-col {
+  min-width: 95px;
+  text-align: center;
+}
+
+.item-col {
+  min-width: 120px;
+}
+
+.table-responsive {
+  max-height: 480px;
+}
+
+.form-section {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.badge-status {
+  font-size: 0.75rem;
+}
+
+.gradient-bar .mb-0,
+.mb-0 {
+  color: palevioletred !important;
+}
+
+.text-center {
+  width: 40px;
+}
+
+/* Fix alignment for number inputs in table cells */
+.week-col input[type="number"] {
+  width: 100%;
+  text-align: center;
+  padding: 0.25rem 0.5rem;
+  margin: 0;
+  border: 1px solid #dee2e6;
+  border-radius: 0.25rem;
+  /* Hide spinner arrows for better alignment */
+  /* -moz-appearance: textfield; */
+  -webkit-appearance: none;
+}
+
+.week-col input[type="number"]::-webkit-outer-spin-button,
+.week-col input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Ensure td containing input is properly centered and aligned */
+.week-col {
+  vertical-align: middle;
+  padding: 0.5rem;
+}
+
+/* Make sure input takes full width of cell for perfect centering */
+.week-col input[type="number"] {
+  display: block;
+  margin: 0 auto;
+}
+
+
