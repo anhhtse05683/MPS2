@@ -24,7 +24,11 @@ app.get("/api/products", async (_req, res) => {
     const result = await pool
       .request()
       .query(
-        `SELECT ProductId AS id, ProductCode AS code, ProductName AS name, ImageUrl
+        `SELECT ProductId AS id,
+                ProductCode AS code,
+                ProductName AS name,
+                LeadTimeWeeks AS leadTimeWeeks,
+                ImageUrl
          FROM Products
          ORDER BY ProductCode`
       );
