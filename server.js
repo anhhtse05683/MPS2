@@ -7,7 +7,17 @@ const xlsx = require("xlsx");
 const { getPool, sql } = require("./src/db");
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
+
+// Limits for Excel import to reduce DoS surface
+const MAX_IMPORT_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
+const MAX_IMPORT_ROWS = 5000;
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_IMPORT_FILE_SIZE,
+  },
+});
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname)); // serve root static files
@@ -410,14 +420,17 @@ app.delete("/api/items/:type/:id", async (req, res) => {
 });
 
 // Bulk import items from Excel
-app.post("/api/items/import", upload.single("file"), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "file is required" });
-  try {
-    const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const rows = xlsx.utils.sheet_to_json(sheet, { defval: null });
-    const pool = await getPool();
+app.post(
+  "/api/items/import",
+  upload.single("file"),
+  async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "file is required" });
+    try {
+      const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rows = xlsx.utils.sheet_to_json(sheet, { defval: null });
+      const pool = await getPool();
 
     for (const row of rows) {
       const itemType = (row.Type || row.ItemType || "").toUpperCase();
