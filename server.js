@@ -31,13 +31,15 @@ const parseIntSafe = (v) =>
 app.get("/api/products", async (_req, res) => {
   try {
     const pool = await getPool();
-    const result = await pool
-      .request()
-      .query(
-        `SELECT ProductId AS id, ProductCode AS code, ProductName AS name, ImageUrl
+    const result = await pool.request().query(
+      `SELECT ProductId AS id,
+                ProductCode AS code,
+                ProductName AS name,
+                LeadTimeWeeks AS leadTimeWeeks,
+                ImageUrl
          FROM Products
          ORDER BY ProductCode`
-      );
+    );
     res.json(result.recordset);
   } catch (err) {
     console.error(err);
@@ -151,7 +153,9 @@ app.get("/api/production", async (req, res) => {
         GROUP BY ProductId, PlanYear, PlanWeek
         ORDER BY PlanYear, PlanWeek
       `);
-    console.log(`[Production API] productId=${productId}, fromYear=${fromYear}, fromWeek=${fromWeek}, toYear=${toYear}, toWeek=${toWeek}, found ${result.recordset.length} records`);
+    console.log(
+      `[Production API] productId=${productId}, fromYear=${fromYear}, fromWeek=${fromWeek}, toYear=${toYear}, toWeek=${toWeek}, found ${result.recordset.length} records`
+    );
     res.json(result.recordset);
   } catch (err) {
     console.error("[Production API Error]", err);
@@ -253,8 +257,15 @@ app.get("/api/items", async (req, res) => {
 });
 
 app.post("/api/items", async (req, res) => {
-  const { type, code, name, imageUrl, openingYear, openingWeek, openingBalance } =
-    req.body || {};
+  const {
+    type,
+    code,
+    name,
+    imageUrl,
+    openingYear,
+    openingWeek,
+    openingBalance,
+  } = req.body || {};
   const itemType = (type || "").toUpperCase();
   if (!["P", "M"].includes(itemType))
     return res.status(400).json({ error: "type must be P or M" });
@@ -292,13 +303,13 @@ app.post("/api/items", async (req, res) => {
     const newId = insertResult.recordset[0].id;
 
     if (openingYear && openingWeek && openingBalance !== undefined) {
-      await pool.request()
+      await pool
+        .request()
         .input("itemType", sql.Char(1), itemType)
         .input("itemId", sql.Int, newId)
         .input("startYear", sql.SmallInt, openingYear)
         .input("startWeek", sql.TinyInt, openingWeek)
-        .input("balanceQty", sql.Decimal(18, 3), openingBalance)
-        .query(`
+        .input("balanceQty", sql.Decimal(18, 3), openingBalance).query(`
           MERGE OpeningBalances AS target
           USING (SELECT @itemType AS ItemType, @itemId AS ItemId) AS src
           ON target.ItemType = src.ItemType AND target.ItemId = src.ItemId
@@ -355,13 +366,13 @@ app.put("/api/items/:type/:id", async (req, res) => {
     }
 
     if (openingYear && openingWeek && openingBalance !== undefined) {
-      await pool.request()
+      await pool
+        .request()
         .input("itemType", sql.Char(1), itemType)
         .input("itemId", sql.Int, itemId)
         .input("startYear", sql.SmallInt, openingYear)
         .input("startWeek", sql.TinyInt, openingWeek)
-        .input("balanceQty", sql.Decimal(18, 3), openingBalance)
-        .query(`
+        .input("balanceQty", sql.Decimal(18, 3), openingBalance).query(`
           MERGE OpeningBalances AS target
           USING (SELECT @itemType AS ItemType, @itemId AS ItemId) AS src
           ON target.ItemType = src.ItemType AND target.ItemId = src.ItemId
@@ -390,10 +401,10 @@ app.delete("/api/items/:type/:id", async (req, res) => {
     const pool = await getPool();
     const request = pool.request().input("id", sql.Int, itemId);
     // Remove opening balance first
-    await pool.request()
+    await pool
+      .request()
       .input("itemType", sql.Char(1), itemType)
-      .input("itemId", sql.Int, itemId)
-      .query(`
+      .input("itemId", sql.Int, itemId).query(`
         DELETE FROM OpeningBalances WHERE ItemType = @itemType AND ItemId = @itemId;
       `);
     if (itemType === "P") {
@@ -413,44 +424,33 @@ app.post(
   "/api/items/import",
   upload.single("file"),
   async (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ error: "file is required" });
-    }
+    if (!req.file) return res.status(400).json({ error: "file is required" });
     try {
       const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const rows = xlsx.utils.sheet_to_json(sheet, { defval: null });
-
-      if (!Array.isArray(rows) || rows.length === 0) {
-        return res.status(400).json({ error: "file has no data" });
-      }
-
-      if (rows.length > MAX_IMPORT_ROWS) {
-        return res.status(400).json({
-          error: `too many rows in file (max ${MAX_IMPORT_ROWS})`,
-        });
-      }
       const pool = await getPool();
 
-      for (const row of rows) {
-        const itemType = (row.Type || row.ItemType || "").toUpperCase();
-        const code = row.Code || row.MCode || row.PCode;
-        const name = row.Name || row.ItemName;
-        if (!["P", "M"].includes(itemType) || !code || !name) continue;
-        const imageUrl = row.ImageUrl || null;
-        const openingYear = row.StartYear || row.OpenYear;
-        const openingWeek = row.StartWeek || row.OpenWeek;
-        const openingBalance = row.Balance || row.OpeningBalance;
+    for (const row of rows) {
+      const itemType = (row.Type || row.ItemType || "").toUpperCase();
+      const code = row.Code || row.MCode || row.PCode;
+      const name = row.Name || row.ItemName;
+      if (!["P", "M"].includes(itemType) || !code || !name) continue;
+      const imageUrl = row.ImageUrl || null;
+      const openingYear = row.StartYear || row.OpenYear;
+      const openingWeek = row.StartWeek || row.OpenWeek;
+      const openingBalance = row.Balance || row.OpeningBalance;
 
-        // Upsert product/material by code
-        const request = pool.request()
-          .input("code", sql.NVarChar, code)
-          .input("name", sql.NVarChar, name)
-          .input("imageUrl", sql.NVarChar(sql.MAX), imageUrl);
-        let mergeQuery;
-        if (itemType === "P") {
-          mergeQuery = `
+      // Upsert product/material by code
+      const request = pool
+        .request()
+        .input("code", sql.NVarChar, code)
+        .input("name", sql.NVarChar, name)
+        .input("imageUrl", sql.NVarChar(sql.MAX), imageUrl);
+      let mergeQuery;
+      if (itemType === "P") {
+        mergeQuery = `
             MERGE Products AS target
             USING (SELECT @code AS ProductCode) AS src
             ON target.ProductCode = src.ProductCode
@@ -461,8 +461,8 @@ app.post(
               VALUES (@code, @name, @imageUrl)
             OUTPUT INSERTED.ProductId AS id;
           `;
-        } else {
-          mergeQuery = `
+      } else {
+        mergeQuery = `
             MERGE Materials AS target
             USING (SELECT @code AS MaterialCode) AS src
             ON target.MaterialCode = src.MaterialCode
@@ -473,18 +473,18 @@ app.post(
               VALUES (@code, @name, @imageUrl)
             OUTPUT INSERTED.MaterialId AS id;
           `;
-        }
-        const mergeResult = await request.query(mergeQuery);
-        const newId = mergeResult.recordset[0].id;
+      }
+      const mergeResult = await request.query(mergeQuery);
+      const newId = mergeResult.recordset[0].id;
 
-        if (openingYear && openingWeek && openingBalance !== undefined) {
-          await pool.request()
-            .input("itemType", sql.Char(1), itemType)
-            .input("itemId", sql.Int, newId)
-            .input("startYear", sql.SmallInt, openingYear)
-            .input("startWeek", sql.TinyInt, openingWeek)
-            .input("balanceQty", sql.Decimal(18, 3), openingBalance)
-            .query(`
+      if (openingYear && openingWeek && openingBalance !== undefined) {
+        await pool
+          .request()
+          .input("itemType", sql.Char(1), itemType)
+          .input("itemId", sql.Int, newId)
+          .input("startYear", sql.SmallInt, openingYear)
+          .input("startWeek", sql.TinyInt, openingWeek)
+          .input("balanceQty", sql.Decimal(18, 3), openingBalance).query(`
               MERGE OpeningBalances AS target
               USING (SELECT @itemType AS ItemType, @itemId AS ItemId) AS src
               ON target.ItemType = src.ItemType AND target.ItemId = src.ItemId
@@ -494,16 +494,15 @@ app.post(
                 INSERT (ItemType, ItemId, StartYear, StartWeek, BalanceQty)
                 VALUES (@itemType, @itemId, @startYear, @startWeek, @balanceQty);
             `);
-        }
       }
-
-      res.json({ ok: true });
-    } catch (err) {
-      console.error("[Items Import Error]", err);
-      res.status(500).json({ error: "Failed to import items" });
     }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[Items Import Error]", err);
+    res.status(500).json({ error: "Failed to import items" });
   }
-);
+});
 
 // -------- Sales plan (SHIP_QTY) ----------
 app.get("/api/sales-plan", async (req, res) => {

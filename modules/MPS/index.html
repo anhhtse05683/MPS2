@@ -314,7 +314,15 @@
             items.forEach(item => {
                 const tr = document.createElement("tr");
                 const nameTd = document.createElement("td");
-                nameTd.textContent = product.code;
+                // First column: Code / Name / Lead time
+                if (item.label === "SHIP_QTY") {
+                    nameTd.textContent = product.code;
+                } else if (item.label === "Pro_QTY") {
+                    nameTd.textContent = product.name || product.code;
+                } else if (item.label === "Balance") {
+                    const lt = product.leadTimeWeeks;
+                    nameTd.textContent = lt != null ? `${lt}` : "";
+                }
                 nameTd.className = "fw-semibold text-center";
                 tr.appendChild(nameTd);
 
