@@ -4,9 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Material Planning Schedule</title>
+    <title data-i18n="mps.title">Material Planning Schedule</title>
     <link rel="stylesheet" href="/modules/MPS/assets/css/mps.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="/modules/assets/js/i18n.js"></script>
 
 </head>
 
@@ -14,11 +15,11 @@
     <div class="container-fluid">
         <div class="gradient-bar mb-3 d-flex flex-wrap align-items-center gap-3 justify-content-between">
             <div>
-                <h4 class="mb-0">Material Planning Schedule (MPS)</h4>
-                <small>Quan sát nhanh tồn kho dự kiến theo tuần</small>
+                <h4 class="mb-0" data-i18n="mps.title">Material Planning Schedule (MPS)</h4>
+                <small data-i18n="mps.subtitle">Quan sát nhanh tồn kho dự kiến theo tuần</small>
             </div>
             <div class="d-flex gap-2 align-items-center flex-wrap">
-                <span class="fw-semibold">Module:</span>
+                <span class="fw-semibold" data-i18n="mps.module">Module:</span>
                 <span class="badge bg-primary">MPS</span>
                 <span class="badge bg-success">Production</span>
                 <span class="badge bg-info text-dark">Purchase</span>
@@ -30,66 +31,66 @@
                 <div class="form-section">
                     <div class="row g-3 align-items-end">
                         <div class="col-6 col-md-2">
-                            <label class="form-label">Từ tuần</label>
+                            <label class="form-label" data-i18n="mps.fromWeek">Từ tuần</label>
                             <input id="startWeek" type="number" min="1" max="53" class="form-control" value="47">
                         </div>
                         <div class="col-6 col-md-2">
-                            <label class="form-label">Năm</label>
+                            <label class="form-label" data-i18n="mps.year">Năm</label>
                             <input id="startYear" type="number" class="form-control" value="2025">
                         </div>
                         <div class="col-6 col-md-2">
-                            <label class="form-label">Đến tuần</label>
+                            <label class="form-label" data-i18n="mps.toWeek">Đến tuần</label>
                             <input id="endWeek" type="number" min="1" max="53" class="form-control" value="53">
                         </div>
                         <div class="col-6 col-md-2">
-                            <label class="form-label">Năm</label>
+                            <label class="form-label" data-i18n="mps.year">Năm</label>
                             <input id="endYear" type="number" class="form-control" value="2025">
                         </div>
                         <div class="col-12 col-md-4">
-                            <label class="form-label">Chọn sản phẩm</label>
+                            <label class="form-label" data-i18n="mps.selectProduct">Chọn sản phẩm</label>
                             <select id="productSelect" class="form-select"></select>
                         </div>
                     </div>
                     <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
                         <div class="d-flex gap-3 align-items-center flex-wrap">
                             <div>
-                                <label class="form-label mb-0 small">Balance tuần đầu (Product)</label>
+                                <label class="form-label mb-0 small" data-i18n="mps.productOpeningBalance">Balance tuần đầu (Product)</label>
                                 <input id="productOpeningValue" type="number" class="form-control form-control-sm"
                                     value="20">
                             </div>
                             <div>
-                                <label class="form-label mb-0 small">Tuần</label>
+                                <label class="form-label mb-0 small" data-i18n="mps.week">Tuần</label>
                                 <input id="productOpeningWeek" type="number" min="1" max="53"
                                     class="form-control form-control-sm" value="47">
                             </div>
                             <div>
-                                <label class="form-label mb-0 small">Năm</label>
+                                <label class="form-label mb-0 small" data-i18n="mps.year">Năm</label>
                                 <input id="productOpeningYear" type="number" class="form-control form-control-sm"
                                     value="2025">
                             </div>
                         </div>
-                        <button id="applyView" class="btn btn-primary">Xem lịch</button>
+                        <button id="applyView" class="btn btn-primary" data-i18n="mps.viewSchedule">Xem lịch</button>
                     </div>
                 </div>
             </div>
             <div class="col-12 col-xl-3">
                 <div class="form-section h-100">
-                    <h6 class="mb-2">Ghi chú nhanh</h6>
+                    <h6 class="mb-2" data-i18n="mps.quickNotes">Ghi chú nhanh</h6>
                     <ul class="mb-2 small">
-                        <li>SHIP_QTY nhập tay; Pro_QTY lấy từ Production (ACTIVE/COMPLETE).</li>
-                        <li>Balance tuần khởi tạo giữ nguyên, tuần sau: prev - ship + pro.</li>
-                        <li>Stock_in lấy từ Purchase đã CONFIRM; Stock_out = Pro * BOM.</li>
-                        <li>Balance NVL: prev - stock_out + stock_in.</li>
+                        <li data-i18n="mps.note1">SHIP_QTY nhập tay; Pro_QTY lấy từ Production (ACTIVE/COMPLETE).</li>
+                        <li data-i18n="mps.note2">Balance tuần khởi tạo giữ nguyên, tuần sau: prev - ship + pro.</li>
+                        <li data-i18n="mps.note3">Stock_in lấy từ Purchase đã CONFIRM; Stock_out = Pro * BOM.</li>
+                        <li data-i18n="mps.note4">Balance NVL: prev - stock_out + stock_in.</li>
                     </ul>
-                    <span class="badge bg-warning text-dark">Tuần trước khởi tạo hiển thị 0</span>
+                    <span class="badge bg-warning text-dark" data-i18n="mps.note5">Tuần trước khởi tạo hiển thị 0</span>
                 </div>
             </div>
         </div>
 
         <div class="form-section">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                <h5 class="mb-0">Product Table</h5>
-                <div class="small text-muted">Nhập SHIP_QTY để tính tức thời</div>
+                <h5 class="mb-0" data-i18n="mps.productTable">Product Table</h5>
+                <div class="small text-muted" data-i18n="mps.productTableDesc">Nhập SHIP_QTY để tính tức thời</div>
             </div>
             <div id="productTableWrapper" class="table-responsive table-sticky">
                 <table class="table table-bordered align-middle">
@@ -106,8 +107,8 @@
 
         <div class="form-section">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                <h5 class="mb-0">Material Table</h5>
-                <div class="small text-muted">Tính theo BOM và phiếu mua CONFIRM</div>
+                <h5 class="mb-0" data-i18n="mps.materialTable">Material Table</h5>
+                <div class="small text-muted" data-i18n="mps.materialTableDesc">Tính theo BOM và phiếu mua CONFIRM</div>
             </div>
             <div id="materialTableWrapper" class="table-responsive table-sticky">
                 <table class="table table-bordered align-middle">
@@ -284,8 +285,8 @@
         function renderHeaders(weeks, headerEl) {
             headerEl.innerHTML = "";
             const staticCols = headerEl.id === "productHeader"
-                ? ["Product Code", "Item"]
-                : ["Material Code", "Item"];
+                ? [window.I18n?.t("mps.productCode") || "Product Code", window.I18n?.t("mps.item") || "Item"]
+                : [window.I18n?.t("mps.materialCode") || "Material Code", window.I18n?.t("mps.item") || "Item"];
             staticCols.forEach(text => {
                 const th = document.createElement("th");
                 th.className = "text-center";
@@ -305,9 +306,9 @@
             body.innerHTML = "";
 
             const items = [
-                { label: "SHIP_QTY", values: rows.ship, type: "input" },
-                { label: "Pro_QTY", values: rows.pro },
-                { label: "Balance", values: rows.balance, highlightNegative: true }
+                { label: window.I18n?.t("mps.shipQty") || "SHIP_QTY", values: rows.ship, type: "input" },
+                { label: window.I18n?.t("mps.proQty") || "Pro_QTY", values: rows.pro },
+                { label: window.I18n?.t("mps.balance") || "Balance", values: rows.balance, highlightNegative: true }
             ];
 
             items.forEach(item => {
@@ -349,9 +350,9 @@
             body.innerHTML = "";
             materialRows.forEach(row => {
                 const items = [
-                    { label: "Stock_In_Qty", values: row.stockIn },
-                    { label: "Stock_Out_Qty", values: row.stockOut },
-                    { label: "Balance", values: row.balance, highlightNegative: true, secondary: true }
+                    { label: window.I18n?.t("mps.stockInQty") || "Stock_In_Qty", values: row.stockIn },
+                    { label: window.I18n?.t("mps.stockOutQty") || "Stock_Out_Qty", values: row.stockOut },
+                    { label: window.I18n?.t("mps.balance") || "Balance", values: row.balance, highlightNegative: true, secondary: true }
                 ];
                 items.forEach((item, itemIdx) => {
                     const tr = document.createElement("tr");
@@ -417,6 +418,7 @@
                     pendingShipChanges = {};
                 } catch (err) {
                     console.error("Save SHIP_QTY failed", err);
+                    alert(window.I18n?.t("mps.errorSaveShipQty") || "Lỗi lưu SHIP_QTY");
                 }
             }, 600);
         }
@@ -440,7 +442,7 @@
                 await loadDataAndRender(); // refresh
             } catch (err) {
                 console.error(err);
-                alert("Không lưu được tồn kho ban đầu");
+                alert(window.I18n?.t("mps.errorSaveOpening") || "Không lưu được tồn kho ban đầu");
             }
         }
 
@@ -551,10 +553,33 @@
             await loadDataAndRender();
         }
 
-        document.addEventListener("DOMContentLoaded", () => {
+        // Listen for language changes to re-render
+        document.addEventListener('languageChanged', () => {
+            renderAll();
+        });
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            // Wait for i18n to be ready
+            await new Promise(resolve => {
+                if (window.I18n && window.I18n.translations[window.I18n.currentLang]) {
+                    resolve();
+                } else {
+                    const checkInterval = setInterval(() => {
+                        if (window.I18n && window.I18n.translations[window.I18n.currentLang]) {
+                            clearInterval(checkInterval);
+                            resolve();
+                        }
+                    }, 100);
+                    setTimeout(() => {
+                        clearInterval(checkInterval);
+                        resolve(); // Timeout after 2 seconds
+                    }, 2000);
+                }
+            });
+            
             init().catch(err => {
                 console.error(err);
-                alert("Không tải được dữ liệu khởi động");
+                alert(window.I18n?.t("mps.errorLoadData") || "Không tải được dữ liệu khởi động");
             });
         });
     </script>

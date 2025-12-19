@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="settings.title">Settings</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="/modules/assets/js/i18n.js"></script>
+    <style>
+        body {
+            background-color: #f5f6fa;
+            padding: 20px;
+        }
+        .settings-container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .settings-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .settings-section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .language-option {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .language-option:hover {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+        .language-option.active {
+            border-color: #667eea;
+            background-color: #f0f4ff;
+        }
+        .language-option .check-icon {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            color: #667eea;
+            visibility: hidden;
+        }
+        .language-option.active .check-icon {
+            visibility: visible;
+        }
+        .language-info {
+            flex: 1;
+        }
+        .language-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: #333;
+        }
+        .language-native {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 2px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="settings-container">
+        <div class="settings-card">
+            <h2 class="settings-section-title">
+                <i class="bi bi-sliders"></i>
+                <span data-i18n="settings.title">Cài đặt</span>
+            </h2>
+        </div>
+
+        <!-- Language Settings -->
+        <div class="settings-card">
+            <h3 class="settings-section-title">
+                <i class="bi bi-globe"></i>
+                <span data-i18n="settings.language">Ngôn ngữ</span>
+            </h3>
+            <p class="text-muted mb-4" data-i18n="settings.languageDesc">Chọn ngôn ngữ hiển thị cho hệ thống</p>
+            
+            <div id="languageOptions">
+                <div class="language-option" data-lang="vi">
+                    <div class="check-icon">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                    <div class="language-info">
+                        <div class="language-name">Tiếng Việt</div>
+                        <div class="language-native">Tiếng Việt</div>
+                    </div>
+                </div>
+                <div class="language-option" data-lang="en">
+                    <div class="check-icon">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                    <div class="language-info">
+                        <div class="language-name">English</div>
+                        <div class="language-native">English</div>
+                    </div>
+                </div>
+                <div class="language-option" data-lang="ko">
+                    <div class="check-icon">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                    <div class="language-info">
+                        <div class="language-name">한국어</div>
+                        <div class="language-native">Korean</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Display Settings -->
+        <div class="settings-card">
+            <h3 class="settings-section-title">
+                <i class="bi bi-display"></i>
+                <span data-i18n="settings.display">Hiển thị</span>
+            </h3>
+            
+            <div class="form-group">
+                <label class="form-label" data-i18n="settings.theme">Giao diện:</label>
+                <select class="form-select" id="themeSelect">
+                    <option value="light" data-i18n="settings.lightTheme">Sáng</option>
+                    <option value="dark" data-i18n="settings.darkTheme">Tối</option>
+                    <option value="auto" data-i18n="settings.autoTheme">Tự động</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" data-i18n="settings.dateFormat">Định dạng ngày:</label>
+                <select class="form-select" id="dateFormatSelect">
+                    <option value="dd/mm/yyyy">DD/MM/YYYY</option>
+                    <option value="mm/dd/yyyy">MM/DD/YYYY</option>
+                    <option value="yyyy-mm-dd">YYYY-MM-DD</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" data-i18n="settings.timeFormat">Định dạng giờ:</label>
+                <select class="form-select" id="timeFormatSelect">
+                    <option value="24h" data-i18n="settings.24hour">24 giờ</option>
+                    <option value="12h" data-i18n="settings.12hour">12 giờ (AM/PM)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Notification Settings -->
+        <div class="settings-card">
+            <h3 class="settings-section-title">
+                <i class="bi bi-bell"></i>
+                <span data-i18n="settings.notifications">Thông báo</span>
+            </h3>
+            
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="emailNotifications" checked>
+                <label class="form-check-label" for="emailNotifications" data-i18n="settings.emailNotifications">Thông báo qua email</label>
+            </div>
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="pushNotifications" checked>
+                <label class="form-check-label" for="pushNotifications" data-i18n="settings.pushNotifications">Thông báo đẩy</label>
+            </div>
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="orderNotifications" checked>
+                <label class="form-check-label" for="orderNotifications" data-i18n="settings.orderNotifications">Thông báo đơn hàng</label>
+            </div>
+        </div>
+
+        <!-- Save Button -->
+        <div class="settings-card">
+            <button class="btn btn-primary btn-lg" id="saveSettings" data-i18n="settings.save">Lưu cài đặt</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Update language checkmarks
+        function updateLanguageCheckmarks() {
+            const currentLang = window.I18n?.getCurrentLanguage() || 'vi';
+            document.querySelectorAll('.language-option').forEach(option => {
+                const lang = option.getAttribute('data-lang');
+                if (lang === currentLang) {
+                    option.classList.add('active');
+                } else {
+                    option.classList.remove('active');
+                }
+            });
+        }
+
+        // Handle language selection
+        document.querySelectorAll('.language-option').forEach(option => {
+            option.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const lang = option.getAttribute('data-lang');
+                if (window.I18n) {
+                    await window.I18n.setLanguage(lang);
+                    updateLanguageCheckmarks();
+                    
+                    // Notify parent window (ERP portal) if running in iframe
+                    if (window.parent && window.parent !== window) {
+                        try {
+                            window.parent.postMessage({
+                                type: 'languageChanged',
+                                lang: lang
+                            }, '*');
+                        } catch (e) {
+                            console.warn('[Settings] Failed to notify parent:', e);
+                        }
+                    }
+                }
+            });
+        });
+
+        // Listen for language changes
+        document.addEventListener('languageChanged', () => {
+            updateLanguageCheckmarks();
+        });
+
+        // Initialize checkmarks on load
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                updateLanguageCheckmarks();
+            }, 500);
+        });
+
+        // Save settings handler
+        document.getElementById('saveSettings')?.addEventListener('click', () => {
+            const settings = {
+                theme: document.getElementById('themeSelect').value,
+                dateFormat: document.getElementById('dateFormatSelect').value,
+                timeFormat: document.getElementById('timeFormatSelect').value,
+                emailNotifications: document.getElementById('emailNotifications').checked,
+                pushNotifications: document.getElementById('pushNotifications').checked,
+                orderNotifications: document.getElementById('orderNotifications').checked
+            };
+            localStorage.setItem('app_settings', JSON.stringify(settings));
+            
+            // Notify parent window about settings save (including language)
+            if (window.parent && window.parent !== window) {
+                try {
+                    const currentLang = window.I18n?.getCurrentLanguage() || 'vi';
+                    window.parent.postMessage({
+                        type: 'settingsSaved',
+                        settings: settings,
+                        language: currentLang
+                    }, '*');
+                } catch (e) {
+                    console.warn('[Settings] Failed to notify parent about save:', e);
+                }
+            }
+            
+            alert(window.I18n?.t('settings.saved') || 'Đã lưu cài đặt');
+        });
+
+        // Load saved settings
+        document.addEventListener('DOMContentLoaded', () => {
+            const saved = localStorage.getItem('app_settings');
+            if (saved) {
+                try {
+                    const settings = JSON.parse(saved);
+                    if (settings.theme) document.getElementById('themeSelect').value = settings.theme;
+                    if (settings.dateFormat) document.getElementById('dateFormatSelect').value = settings.dateFormat;
+                    if (settings.timeFormat) document.getElementById('timeFormatSelect').value = settings.timeFormat;
+                    if (settings.emailNotifications !== undefined) document.getElementById('emailNotifications').checked = settings.emailNotifications;
+                    if (settings.pushNotifications !== undefined) document.getElementById('pushNotifications').checked = settings.pushNotifications;
+                    if (settings.orderNotifications !== undefined) document.getElementById('orderNotifications').checked = settings.orderNotifications;
+                } catch (e) {
+                    console.error('Failed to load settings:', e);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+

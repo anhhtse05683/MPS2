@@ -4,10 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ERP System - Hệ thống Quản lý Doanh nghiệp</title>
+    <title data-i18n="erp.title">ERP System - Hệ thống Quản lý Doanh nghiệp</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="/modules/assets/js/i18n.js"></script>
     <style>
         /* Sidebar collapse styles */
         /* Sidebar collapse styles (currently pinned by default) */
@@ -33,112 +34,112 @@
         </div>
         <nav class="sidebar-menu">
             <div class="menu-section">
-                <div class="menu-section-title">Trang chủ</div>
+                <div class="menu-section-title" data-i18n="erp.home">Trang chủ</div>
                 <a href="#dashboard" class="menu-item active">
                     <i class="bi bi-speedometer2"></i>
-                    <span>Dashboard</span>
+                    <span data-i18n="erp.dashboard">Dashboard</span>
                 </a>
             </div>
             <div class="menu-section">
-                <div class="menu-section-title">Quản lý sản xuất</div>
+                <div class="menu-section-title" data-i18n="erp.production">Quản lý sản xuất</div>
                 <a href="#production" class="menu-item">
                     <i class="bi bi-gear-wide-connected"></i>
-                    <span>Kế hoạch sản xuất</span>
+                    <span data-i18n="erp.productionPlan">Kế hoạch sản xuất</span>
                 </a>
                 <a href="#mps" class="menu-item" data-src="/modules/MPS/index.html">
                     <i class="bi bi-diagram-3"></i>
-                    <span>MRP - Hoạch định</span>
+                    <span data-i18n="erp.mrp">MRP - Hoạch định</span>
                 </a>
                 <a href="#quality" class="menu-item">
                     <i class="bi bi-shield-check"></i>
-                    <span>Quản lý chất lượng</span>
+                    <span data-i18n="erp.quality">Quản lý chất lượng</span>
                 </a>
                 <a href="#maintenance" class="menu-item">
                     <i class="bi bi-tools"></i>
-                    <span>Bảo trì thiết bị</span>
+                    <span data-i18n="erp.maintenance">Bảo trì thiết bị</span>
                 </a>
             </div>
             <div class="menu-section">
-                <div class="menu-section-title">Quản lý sản phẩm</div>
+                <div class="menu-section-title" data-i18n="erp.productManagement">Quản lý sản phẩm</div>
                 <a href="#itemMaster" class="menu-item" data-src="/modules/Product/index.html">
                     <i class="bi bi-box-seam"></i>
-                    <span>Danh mục sản phẩm</span>
+                    <span data-i18n="erp.productCatalog">Danh mục sản phẩm</span>
                 </a>
             </div>
             <div class="menu-section">
-                <div class="menu-section-title">Quản lý kho</div>
+                <div class="menu-section-title" data-i18n="erp.inventory">Quản lý kho</div>
                 <a href="#inventory" class="menu-item">
                     <i class="bi bi-boxes"></i>
-                    <span>Tồn kho</span>
+                    <span data-i18n="erp.stock">Tồn kho</span>
                 </a>
                 <a href="#warehouse" class="menu-item">
                     <i class="bi bi-building"></i>
-                    <span>Kho hàng</span>
+                    <span data-i18n="erp.warehouse">Kho hàng</span>
                 </a>
                 <a href="#purchasing" class="menu-item">
                     <i class="bi bi-cart-plus"></i>
-                    <span>Mua hàng</span>
+                    <span data-i18n="erp.purchasing">Mua hàng</span>
                 </a>
             </div>
             <div class="menu-section">
-                <div class="menu-section-title">Bán hàng & CRM</div>
+                <div class="menu-section-title" data-i18n="erp.sales">Bán hàng & CRM</div>
                 <a href="#sales" class="menu-item">
                     <i class="bi bi-graph-up-arrow"></i>
-                    <span>Bán hàng</span>
+                    <span data-i18n="erp.salesOrder">Bán hàng</span>
                 </a>
                 <a href="#crm" class="menu-item">
                     <i class="bi bi-people"></i>
-                    <span>Quản lý khách hàng</span>
+                    <span data-i18n="erp.customerManagement">Quản lý khách hàng</span>
                 </a>
                 <a href="#orders" class="menu-item">
                     <i class="bi bi-receipt"></i>
-                    <span>Đơn hàng</span>
+                    <span data-i18n="erp.orders">Đơn hàng</span>
                     <span class="badge">12</span>
                 </a>
             </div>
             <div class="menu-section">
-                <div class="menu-section-title">Tài chính</div>
+                <div class="menu-section-title" data-i18n="erp.finance">Tài chính</div>
                 <a href="#accounting" class="menu-item">
                     <i class="bi bi-calculator"></i>
-                    <span>Kế toán</span>
+                    <span data-i18n="erp.accounting">Kế toán</span>
                 </a>
                 <a href="#finance" class="menu-item">
                     <i class="bi bi-wallet2"></i>
-                    <span>Tài chính</span>
+                    <span data-i18n="erp.financeManagement">Tài chính</span>
                 </a>
                 <a href="#budget" class="menu-item">
                     <i class="bi bi-pie-chart"></i>
-                    <span>Ngân sách</span>
+                    <span data-i18n="erp.budget">Ngân sách</span>
                 </a>
             </div>
             <div class="menu-section">
-                <div class="menu-section-title">Báo cáo</div>
+                <div class="menu-section-title" data-i18n="erp.reports">Báo cáo</div>
                 <a href="#reports" class="menu-item">
                     <i class="bi bi-file-earmark-text"></i>
-                    <span>Báo cáo tổng hợp</span>
+                    <span data-i18n="erp.reportsSummary">Báo cáo tổng hợp</span>
                 </a>
                 <a href="#analytics" class="menu-item">
                     <i class="bi bi-graph-up"></i>
-                    <span>Phân tích dữ liệu</span>
+                    <span data-i18n="erp.analytics">Phân tích dữ liệu</span>
                 </a>
                 <a href="#exports" class="menu-item">
                     <i class="bi bi-download"></i>
-                    <span>Xuất báo cáo</span>
+                    <span data-i18n="erp.exportReports">Xuất báo cáo</span>
                 </a>
             </div>
             <div class="menu-section">
-                <div class="menu-section-title">Hệ thống</div>
+                <div class="menu-section-title" data-i18n="erp.system">Hệ thống</div>
                 <a href="#users" class="menu-item">
                     <i class="bi bi-person-gear"></i>
-                    <span>Quản lý người dùng</span>
+                    <span data-i18n="erp.userManagement">Quản lý người dùng</span>
                 </a>
                 <a href="#settings" class="menu-item">
                     <i class="bi bi-sliders"></i>
-                    <span>Cài đặt hệ thống</span>
+                    <span data-i18n="erp.systemSettings">Cài đặt hệ thống</span>
                 </a>
                 <a href="#help" class="menu-item">
                     <i class="bi bi-question-circle"></i>
-                    <span>Trợ giúp</span>
+                    <span data-i18n="erp.help">Trợ giúp</span>
                 </a>
             </div>
         </nav>
@@ -150,20 +151,29 @@
         <div class="top-navbar">
             <div class="search-box">
                 <i class="bi bi-search"></i>
-                <input type="text" placeholder="Tìm kiếm module, chức năng...">
+                <input type="text" data-i18n="erp.searchPlaceholder" placeholder="Tìm kiếm module, chức năng...">
             </div>
             <div class="user-menu">
                 <div class="notification-icon">
                     <i class="bi bi-bell"></i>
                     <span class="badge">5</span>
                 </div>
-                <div class="user-profile">
-                    <div class="user-avatar">NV</div>
-                    <div>
-                        <div style="font-weight: 600; font-size: 0.9rem;">Nguyễn Văn A</div>
-                        <small style="color: var(--secondary); font-size: 0.8rem;">Quản trị viên</small>
+                <div class="user-profile dropdown" id="userProfileDropdown">
+                    <div class="user-profile" data-bs-toggle="dropdown" aria-expanded="false" style="cursor: pointer;">
+                        <div class="user-avatar">NV</div>
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.9rem;">Nguyễn Văn A</div>
+                            <small style="color: var(--secondary); font-size: 0.8rem;" data-i18n="erp.admin">Quản trị viên</small>
+                        </div>
+                        <i class="bi bi-chevron-down" style="color: var(--secondary);"></i>
                     </div>
-                    <i class="bi bi-chevron-down" style="color: var(--secondary);"></i>
+                    <ul class="dropdown-menu dropdown-menu-end" style="min-width: 200px;">
+                        <li><h6 class="dropdown-header" data-i18n="erp.profile">Hồ sơ</h6></li>
+                        <li><a class="dropdown-item" href="#profile" data-src="/modules/Profile/index.html"><i class="bi bi-person"></i> <span data-i18n="erp.profile">Hồ sơ</span></a></li>
+                        <li><a class="dropdown-item" href="#settings" data-src="/modules/Settings/index.html"><i class="bi bi-gear"></i> <span data-i18n="erp.settings">Cài đặt</span></a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item text-danger" href="#logout"><i class="bi bi-box-arrow-right"></i> <span data-i18n="erp.logout">Đăng xuất</span></a></li>
+                    </ul>
                 </div>
             </div>
         </div>
@@ -171,8 +181,8 @@
         <!-- Content Area -->
         <div class="dashboard-content" id="dashboardContent">
             <div class="page-header">
-                <h1>Dashboard</h1>
-                <p>Chào mừng trở lại! Đây là tổng quan về hoạt động của công ty</p>
+                <h1 data-i18n="erp.dashboard">Dashboard</h1>
+                <p data-i18n="erp.welcome">Chào mừng trở lại! Đây là tổng quan về hoạt động của công ty</p>
             </div>
 
             <!-- Stats Cards -->
@@ -181,10 +191,10 @@
                     <div class="stat-header">
                         <div>
                             <div class="stat-value">1,245</div>
-                            <div class="stat-label">Đơn hàng trong tháng</div>
+                            <div class="stat-label" data-i18n="erp.ordersThisMonth">Đơn hàng trong tháng</div>
                             <div class="stat-change positive">
                                 <i class="bi bi-arrow-up"></i>
-                                <span>12.5% so với tháng trước</span>
+                                <span>12.5% <span data-i18n="erp.comparedToLastMonth">so với tháng trước</span></span>
                             </div>
                         </div>
                         <div class="stat-icon">
@@ -197,10 +207,10 @@
                     <div class="stat-header">
                         <div>
                             <div class="stat-value">₫2.8B</div>
-                            <div class="stat-label">Doanh thu tháng này</div>
+                            <div class="stat-label" data-i18n="erp.revenueThisMonth">Doanh thu tháng này</div>
                             <div class="stat-change positive">
                                 <i class="bi bi-arrow-up"></i>
-                                <span>8.3% tăng trưởng</span>
+                                <span>8.3% <span data-i18n="erp.growth">tăng trưởng</span></span>
                             </div>
                         </div>
                         <div class="stat-icon">
@@ -213,10 +223,10 @@
                     <div class="stat-header">
                         <div>
                             <div class="stat-value">156</div>
-                            <div class="stat-label">Sản phẩm đang sản xuất</div>
+                            <div class="stat-label" data-i18n="erp.productsInProduction">Sản phẩm đang sản xuất</div>
                             <div class="stat-change negative">
                                 <i class="bi bi-arrow-down"></i>
-                                <span>3 đơn hàng chậm tiến độ</span>
+                                <span>3 <span data-i18n="erp.ordersDelayed">đơn hàng chậm tiến độ</span></span>
                             </div>
                         </div>
                         <div class="stat-icon">
@@ -229,10 +239,10 @@
                     <div class="stat-header">
                         <div>
                             <div class="stat-value">89%</div>
-                            <div class="stat-label">Tỷ lệ hoàn thành đơn hàng</div>
+                            <div class="stat-label" data-i18n="erp.orderCompletionRate">Tỷ lệ hoàn thành đơn hàng</div>
                             <div class="stat-change positive">
                                 <i class="bi bi-arrow-up"></i>
-                                <span>2.1% cải thiện</span>
+                                <span>2.1% <span data-i18n="erp.improvement">cải thiện</span></span>
                             </div>
                         </div>
                         <div class="stat-icon">
@@ -246,32 +256,32 @@
             <div class="quick-actions">
                 <h3 class="section-title">
                     <i class="bi bi-lightning-charge-fill"></i>
-                    Thao tác nhanh
+                    <span data-i18n="erp.quickActions">Thao tác nhanh</span>
                 </h3>
                 <div class="actions-grid">
                     <a href="#new-order" class="action-btn">
                         <i class="bi bi-plus-circle"></i>
-                        <span>Tạo đơn hàng mới</span>
+                        <span data-i18n="erp.newOrder">Tạo đơn hàng mới</span>
                     </a>
                     <a href="#new-production" class="action-btn">
                         <i class="bi bi-play-circle"></i>
-                        <span>Bắt đầu sản xuất</span>
+                        <span data-i18n="erp.startProduction">Bắt đầu sản xuất</span>
                     </a>
                     <a href="#inventory-check" class="action-btn">
                         <i class="bi bi-clipboard-check"></i>
-                        <span>Kiểm kê kho</span>
+                        <span data-i18n="erp.inventoryCheck">Kiểm kê kho</span>
                     </a>
                     <a href="#new-purchase" class="action-btn">
                         <i class="bi bi-cart-plus"></i>
-                        <span>Đặt mua hàng</span>
+                        <span data-i18n="erp.newPurchase">Đặt mua hàng</span>
                     </a>
                     <a href="#quality-check" class="action-btn">
                         <i class="bi bi-shield-check"></i>
-                        <span>Kiểm tra chất lượng</span>
+                        <span data-i18n="erp.qualityCheck">Kiểm tra chất lượng</span>
                     </a>
                     <a href="#report" class="action-btn">
                         <i class="bi bi-file-earmark-text"></i>
-                        <span>Tạo báo cáo</span>
+                        <span data-i18n="erp.createReport">Tạo báo cáo</span>
                     </a>
                 </div>
             </div>
@@ -282,64 +292,64 @@
                     <div class="quick-actions">
                         <h3 class="section-title">
                             <i class="bi bi-grid-3x3-gap"></i>
-                            Các module hệ thống
+                            <span data-i18n="erp.systemModules">Các module hệ thống</span>
                         </h3>
                         <div class="modules-grid">
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-gear-wide-connected"></i>
                                 </div>
-                                <h5>Quản lý sản xuất</h5>
-                                <p>Theo dõi và quản lý quy trình sản xuất, kế hoạch sản xuất</p>
+                                <h5 data-i18n="erp.productionManagement">Quản lý sản xuất</h5>
+                                <p data-i18n="erp.productionManagementDesc">Theo dõi và quản lý quy trình sản xuất, kế hoạch sản xuất</p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-boxes"></i>
                                 </div>
-                                <h5>Quản lý kho</h5>
-                                <p>Kiểm soát tồn kho, nhập xuất hàng hóa, điều chuyển kho</p>
+                                <h5 data-i18n="erp.inventoryManagement">Quản lý kho</h5>
+                                <p data-i18n="erp.inventoryManagementDesc">Kiểm soát tồn kho, nhập xuất hàng hóa, điều chuyển kho</p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-graph-up-arrow"></i>
                                 </div>
-                                <h5>Bán hàng</h5>
-                                <p>Quản lý đơn hàng, khách hàng, báo giá và hợp đồng</p>
+                                <h5 data-i18n="erp.salesManagement">Bán hàng</h5>
+                                <p data-i18n="erp.salesManagementDesc">Quản lý đơn hàng, khách hàng, báo giá và hợp đồng</p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-cart-plus"></i>
                                 </div>
-                                <h5>Mua hàng</h5>
-                                <p>Quản lý đơn mua hàng, nhà cung cấp, hợp đồng mua</p>
+                                <h5 data-i18n="erp.purchasingManagement">Mua hàng</h5>
+                                <p data-i18n="erp.purchasingManagementDesc">Quản lý đơn mua hàng, nhà cung cấp, hợp đồng mua</p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-calculator"></i>
                                 </div>
-                                <h5>Kế toán</h5>
-                                <p>Quản lý tài chính, công nợ, báo cáo tài chính</p>
+                                <h5 data-i18n="erp.accountingManagement">Kế toán</h5>
+                                <p data-i18n="erp.accountingManagementDesc">Quản lý tài chính, công nợ, báo cáo tài chính</p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-shield-check"></i>
                                 </div>
-                                <h5>Chất lượng</h5>
-                                <p>Kiểm tra chất lượng sản phẩm, quy trình QC/QA</p>
+                                <h5 data-i18n="erp.qualityManagement">Chất lượng</h5>
+                                <p data-i18n="erp.qualityManagementDesc">Kiểm tra chất lượng sản phẩm, quy trình QC/QA</p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-tools"></i>
                                 </div>
-                                <h5>Bảo trì</h5>
-                                <p>Bảo trì thiết bị, máy móc, lịch bảo dưỡng</p>
+                                <h5 data-i18n="erp.maintenanceManagement">Bảo trì</h5>
+                                <p data-i18n="erp.maintenanceManagementDesc">Bảo trì thiết bị, máy móc, lịch bảo dưỡng</p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-people"></i>
                                 </div>
-                                <h5>Nhân sự</h5>
-                                <p>Quản lý nhân viên, chấm công, lương thưởng</p>
+                                <h5 data-i18n="erp.hrManagement">Nhân sự</h5>
+                                <p data-i18n="erp.hrManagementDesc">Quản lý nhân viên, chấm công, lương thưởng</p>
                             </div>
                         </div>
                     </div>
@@ -350,16 +360,16 @@
                     <div class="activity-card">
                         <h3 class="section-title">
                             <i class="bi bi-clock-history"></i>
-                            Hoạt động gần đây
+                            <span data-i18n="erp.recentActivity">Hoạt động gần đây</span>
                         </h3>
                         <div class="activity-item">
                             <div class="activity-icon success">
                                 <i class="bi bi-check-circle"></i>
                             </div>
                             <div class="activity-content">
-                                <h6>Hoàn thành đơn hàng #1234</h6>
-                                <p>Đơn hàng đã được giao thành công</p>
-                                <div class="activity-time">5 phút trước</div>
+                                <h6 data-i18n="erp.orderCompleted" data-i18n-params='{"orderId":"1234"}'>Hoàn thành đơn hàng #1234</h6>
+                                <p data-i18n="erp.orderDelivered">Đơn hàng đã được giao thành công</p>
+                                <div class="activity-time" data-i18n="erp.minutesAgo" data-i18n-params='{"minutes":5}'>5 phút trước</div>
                             </div>
                         </div>
                         <div class="activity-item">
@@ -367,9 +377,9 @@
                                 <i class="bi bi-info-circle"></i>
                             </div>
                             <div class="activity-content">
-                                <h6>Cảnh báo tồn kho thấp</h6>
-                                <p>Nguyên liệu A sắp hết, cần nhập thêm</p>
-                                <div class="activity-time">15 phút trước</div>
+                                <h6 data-i18n="erp.lowStockWarning">Cảnh báo tồn kho thấp</h6>
+                                <p data-i18n="erp.materialRunningOut">Nguyên liệu A sắp hết, cần nhập thêm</p>
+                                <div class="activity-time" data-i18n="erp.minutesAgo" data-i18n-params='{"minutes":15}'>15 phút trước</div>
                             </div>
                         </div>
                         <div class="activity-item">
@@ -377,9 +387,9 @@
                                 <i class="bi bi-exclamation-triangle"></i>
                             </div>
                             <div class="activity-content">
-                                <h6>Đơn hàng chậm tiến độ</h6>
-                                <p>Đơn hàng #1230 cần được xử lý gấp</p>
-                                <div class="activity-time">1 giờ trước</div>
+                                <h6 data-i18n="erp.orderDelayedTitle">Đơn hàng chậm tiến độ</h6>
+                                <p data-i18n="erp.orderNeedsUrgent" data-i18n-params='{"orderId":"1230"}'>Đơn hàng #1230 cần được xử lý gấp</p>
+                                <div class="activity-time" data-i18n="erp.hoursAgo" data-i18n-params='{"hours":1}'>1 giờ trước</div>
                             </div>
                         </div>
                         <div class="activity-item">
@@ -387,9 +397,9 @@
                                 <i class="bi bi-check-circle"></i>
                             </div>
                             <div class="activity-content">
-                                <h6>Nhập kho thành công</h6>
-                                <p>Đã nhập 500 sản phẩm vào kho A</p>
-                                <div class="activity-time">2 giờ trước</div>
+                                <h6 data-i18n="erp.warehouseReceiptSuccess">Nhập kho thành công</h6>
+                                <p data-i18n="erp.productsReceived" data-i18n-params='{"qty":500}'>Đã nhập 500 sản phẩm vào kho A</p>
+                                <div class="activity-time" data-i18n="erp.hoursAgo" data-i18n-params='{"hours":2}'>2 giờ trước</div>
                             </div>
                         </div>
                         <div class="activity-item">
@@ -397,9 +407,9 @@
                                 <i class="bi bi-person-plus"></i>
                             </div>
                             <div class="activity-content">
-                                <h6>Thêm người dùng mới</h6>
-                                <p>Nguyễn Văn B đã được thêm vào hệ thống</p>
-                                <div class="activity-time">3 giờ trước</div>
+                                <h6 data-i18n="erp.newUserAdded">Thêm người dùng mới</h6>
+                                <p data-i18n="erp.userAddedToSystem" data-i18n-params='{"name":"Nguyễn Văn B"}'>Nguyễn Văn B đã được thêm vào hệ thống</p>
+                                <div class="activity-time" data-i18n="erp.hoursAgo" data-i18n-params='{"hours":3}'>3 giờ trước</div>
                             </div>
                         </div>
                     </div>
@@ -429,6 +439,16 @@
             }
         });
 
+        // Function to load module/page in iframe (shared function)
+        function loadModule(src) {
+            const dashboard = document.getElementById('dashboardContent');
+            const moduleContainer = document.getElementById('moduleContainer');
+            const frame = document.getElementById('moduleFrame');
+            if (dashboard) dashboard.style.display = 'none';
+            if (moduleContainer) moduleContainer.style.display = 'block';
+            if (frame) frame.src = src;
+        }
+
         // Menu item active state & module loading
         const menuItems = document.querySelectorAll('.menu-item');
         menuItems.forEach(item => {
@@ -441,12 +461,7 @@
                     e.preventDefault();
                     menuItems.forEach(i => i.classList.remove('active'));
                     item.classList.add('active');
-                    const dashboard = document.getElementById('dashboardContent');
-                    const moduleContainer = document.getElementById('moduleContainer');
-                    const frame = document.getElementById('moduleFrame');
-                    if (dashboard) dashboard.style.display = 'none';
-                    if (moduleContainer) moduleContainer.style.display = 'block';
-                    if (frame) frame.src = src;
+                    loadModule(src);
                     return;
                 }
 
@@ -524,6 +539,68 @@
             notificationIcon.addEventListener('click', () => {
                 // Add notification dropdown logic here
                 alert('Bạn có 5 thông báo mới!');
+            });
+        }
+
+        // Language selection is now handled in Settings page
+        
+        // Listen for messages from iframe (Settings page, Profile page, etc.)
+        window.addEventListener('message', async (event) => {
+            // Security: only accept messages from same origin
+            // In production, you might want to check event.origin
+            if (!event.data || !event.data.type) return;
+            
+            if (event.data.type === 'languageChanged' || event.data.type === 'settingsSaved') {
+                const newLang = event.data.lang || event.data.language;
+                if (window.I18n && newLang && ['vi', 'en', 'ko'].includes(newLang)) {
+                    console.log('[ERP Portal] Language changed from iframe:', newLang);
+                    // Update language in parent window (this will trigger updatePage automatically)
+                    await window.I18n.setLanguage(newLang);
+                }
+            }
+        });
+        
+        // Listen for language changes to update ERP portal (local changes)
+        document.addEventListener('languageChanged', () => {
+            // i18n service will automatically update all elements with data-i18n
+            console.log('[ERP Portal] Language changed locally');
+        });
+
+        // Handle dropdown menu items (Profile, Settings)
+        // Wait for DOM and Bootstrap to be ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initDropdownHandlers);
+        } else {
+            // DOM already loaded, but wait a bit for Bootstrap
+            setTimeout(initDropdownHandlers, 100);
+        }
+
+        function initDropdownHandlers() {
+            document.querySelectorAll('.dropdown-item[data-src]').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const src = item.getAttribute('data-src');
+                    console.log('Dropdown item clicked, src:', src);
+                    if (src) {
+                        loadModule(src);
+                        // Close dropdown using Bootstrap API
+                        const dropdownElement = document.querySelector('#userProfileDropdown .user-profile');
+                        if (dropdownElement) {
+                            const dropdown = bootstrap.Dropdown.getInstance(dropdownElement);
+                            if (dropdown) {
+                                dropdown.hide();
+                            } else {
+                                // Fallback: hide manually
+                                const dropdownMenu = dropdownElement.closest('.dropdown').querySelector('.dropdown-menu');
+                                if (dropdownMenu) {
+                                    dropdownMenu.classList.remove('show');
+                                    dropdownElement.setAttribute('aria-expanded', 'false');
+                                }
+                            }
+                        }
+                    }
+                });
             });
         }
     </script>
