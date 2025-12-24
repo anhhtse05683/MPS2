@@ -57,9 +57,27 @@ body {
 .mb-0 {
   color: palevioletred !important;
 }
-
+.tr-po .text-center {
+  background-color: #ebe9db !important;
+}
+.tr-production .text-center {
+  background: #66ec78 !important;
+}
+.tr-balance .text-center {
+  background: #cece5f !important;
+}
+.tr-po .po-input {
+  background-color: #e9d11b !important;
+}
+#productHeader .text-center {
+  background-color: #c9b6ff;
+}
 .text-center {
   width: 40px;
+}
+
+.table-secondary-row td {
+  background-color: #cece5f !important;
 }
 
 /* Fix alignment for number inputs in table cells */
@@ -92,5 +110,3 @@ body {
   display: block;
   margin: 0 auto;
 }
-
-

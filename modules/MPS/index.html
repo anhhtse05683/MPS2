@@ -54,7 +54,8 @@
                     <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
                         <div class="d-flex gap-3 align-items-center flex-wrap">
                             <div>
-                                <label class="form-label mb-0 small" data-i18n="mps.productOpeningBalance">Balance tuần đầu (Product)</label>
+                                <label class="form-label mb-0 small" data-i18n="mps.productOpeningBalance">Balance tuần
+                                    đầu (Product)</label>
                                 <input id="productOpeningValue" type="number" class="form-control form-control-sm"
                                     value="20">
                             </div>
@@ -317,13 +318,17 @@
                 // First column: Code / Name / Lead time
                 if (item.label === "SHIP_QTY") {
                     nameTd.textContent = product.code;
+                    tr.className = "tr-po"
                 } else if (item.label === "Pro_QTY") {
                     nameTd.textContent = product.name || product.code;
+                    tr.className = "tr-production"
                 } else if (item.label === "Balance") {
                     const lt = product.leadTimeWeeks;
-                    nameTd.textContent = lt != null ? `${lt}` : "";
+                    tr.className = "tr-balance"
+                    nameTd.textContent = lt != null ? `LT: ${lt}weeks` : "";
                 }
                 nameTd.className = "fw-semibold text-center";
+
                 tr.appendChild(nameTd);
 
                 const itemTd = document.createElement("td");
@@ -337,7 +342,7 @@
                     if (item.type === "input") {
                         const input = document.createElement("input");
                         input.type = "number";
-                        input.className = "form-control form-control-sm text-center";
+                        input.className = "form-control form-control-sm po-input";
                         input.value = val;
                         input.dataset.week = weeks[idx].week;
                         input.dataset.year = weeks[idx].year;
@@ -584,7 +589,7 @@
                     }, 2000);
                 }
             });
-            
+
             init().catch(err => {
                 console.error(err);
                 alert(window.I18n?.t("mps.errorLoadData") || "Không tải được dữ liệu khởi động");
