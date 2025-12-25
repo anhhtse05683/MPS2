@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Đơn sản xuất</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="/modules/assets/js/i18n.js"></script>
+    <style>
+        body {
+            background: #f8fafc;
+            padding: 1.5rem;
+        }
+
+        .card {
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+            border: none;
+        }
+
+        .toolbar {
+            gap: 0.5rem;
+        }
+
+        .badge-status {
+            font-size: 0.75rem;
+        }
+
+        .badge-status.INITIAL {
+            background-color: #e5e7eb;
+            color: #111827;
+        }
+
+        .badge-status.ACTIVE {
+            background-color: #2563eb;
+        }
+
+        .badge-status.COMPLETE {
+            background-color: #16a34a;
+        }
+
+        .table thead {
+            background: #f1f5f9;
+        }
+
+        .table thead th {
+            border-bottom-width: 1px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 4px;
+        }
+
+        .status-dot.INITIAL {
+            background-color: #9ca3af;
+        }
+
+        .status-dot.ACTIVE {
+            background-color: #2563eb;
+        }
+
+        .status-dot.COMPLETE {
+            background-color: #16a34a;
+        }
+
+        .pill-filter button.active {
+            background-color: #2563eb;
+            color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div>
+                    <h4 class="mb-0">Quản lý Đơn sản xuất</h4>
+                    <small class="text-muted">Tạo, theo dõi và cập nhật trạng thái Production Orders</small>
+                </div>
+                <div class="d-flex toolbar align-items-center flex-wrap">
+                    <select id="filterProduct" class="form-select form-select-sm">
+                        <option value="">Tất cả sản phẩm</option>
+                    </select>
+                    <input id="filterFromWeek" type="number" min="1" max="53" class="form-control form-control-sm"
+                        style="max-width: 90px;" placeholder="Từ tuần">
+                    <input id="filterFromYear" type="number" class="form-control form-control-sm"
+                        style="max-width: 90px;" placeholder="Năm">
+                    <input id="filterToWeek" type="number" min="1" max="53" class="form-control form-control-sm"
+                        style="max-width: 90px;" placeholder="Đến tuần">
+                    <input id="filterToYear" type="number" class="form-control form-control-sm"
+                        style="max-width: 90px;" placeholder="Năm">
+                    <div class="btn-group pill-filter" role="group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm active"
+                            data-status="">All</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                            data-status="INITIAL">Initial</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                            data-status="ACTIVE">Active</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                            data-status="COMPLETE">Complete</button>
+                    </div>
+                    <button id="btnAddOrder" class="btn btn-primary btn-sm">
+                        <i class="bi bi-plus-lg"></i> Thêm đơn sản xuất
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Sản phẩm</th>
+                            <th>Tên sản phẩm</th>
+                            <th class="text-end">Số lượng</th>
+                            <th>Tuần</th>
+                            <th>Năm</th>
+                            <th>Trạng thái</th>
+                            <th>Ngày tạo</th>
+                            <th class="text-end">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ordersBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Add/Edit -->
+    <div class="modal fade" id="orderModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="orderModalTitle">Thêm đơn sản xuất</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="orderForm" class="row g-3">
+                        <input type="hidden" id="orderId">
+
+                        <div class="col-md-6">
+                            <label class="form-label">Sản phẩm</label>
+                            <select id="orderProductId" class="form-select" required></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Tuần sản xuất</label>
+                            <input id="orderPlanWeek" type="number" min="1" max="53" class="form-control" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Năm sản xuất</label>
+                            <input id="orderPlanYear" type="number" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Số lượng sản xuất</label>
+                            <input id="orderQuantity" type="number" step="0.01" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Trạng thái</label>
+                            <select id="orderStatus" class="form-select">
+                                <option value="INITIAL">INITIAL</option>
+                                <option value="ACTIVE">ACTIVE</option>
+                                <option value="COMPLETE">COMPLETE</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <small class="text-muted">Trạng thái ảnh hưởng trực tiếp tới MPS.</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" id="btnSaveOrder" class="btn btn-primary">Lưu</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API_BASE = "";
+        let orders = [];
+        let products = [];
+        let currentEditing = null;
+
+        async function fetchJson(url, options = {}) {
+            const res = await fetch(API_BASE + url, {
+                headers: { "Content-Type": "application/json" },
+                ...options
+            });
+            if (!res.ok) throw new Error(await res.text() || res.statusText);
+            if (res.status === 204) return null;
+            return res.json();
+        }
+
+        function formatNumber(value) {
+            return Number(value || 0).toLocaleString("vi-VN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        }
+
+        function formatStatusBadge(status) {
+            const s = (status || "").toUpperCase();
+            return `<span class="badge badge-status ${s}"><span class="status-dot ${s}"></span>${s}</span>`;
+        }
+
+        async function loadProducts() {
+            products = await fetchJson("/api/products");
+            const selectFilter = document.getElementById("filterProduct");
+            const selectModal = document.getElementById("orderProductId");
+            selectFilter.innerHTML = '<option value="">Tất cả sản phẩm</option>';
+            selectModal.innerHTML = "";
+            products.forEach(p => {
+                const opt1 = document.createElement("option");
+                opt1.value = p.id;
+                opt1.textContent = `${p.code} - ${p.name}`;
+                selectFilter.appendChild(opt1.cloneNode(true));
+                selectModal.appendChild(opt1);
+            });
+        }
+
+        async function loadOrders() {
+            const params = new URLSearchParams();
+            const productId = document.getElementById("filterProduct").value;
+            const fromWeek = document.getElementById("filterFromWeek").value;
+            const fromYear = document.getElementById("filterFromYear").value;
+            const toWeek = document.getElementById("filterToWeek").value;
+            const toYear = document.getElementById("filterToYear").value;
+            const activeStatusBtn = document.querySelector(".pill-filter button.active");
+            const status = activeStatusBtn ? activeStatusBtn.dataset.status : "";
+
+            if (productId) params.append("productId", productId);
+            if (fromWeek && fromYear) {
+                params.append("fromWeek", fromWeek);
+                params.append("fromYear", fromYear);
+            }
+            if (toWeek && toYear) {
+                params.append("toWeek", toWeek);
+                params.append("toYear", toYear);
+            }
+            if (status) params.append("status", status);
+
+            orders = await fetchJson("/api/production-orders" + (params.toString() ? `?${params.toString()}` : ""));
+            renderOrders();
+        }
+
+        function renderOrders() {
+            const body = document.getElementById("ordersBody");
+            body.innerHTML = "";
+            if (!orders.length) {
+                const tr = document.createElement("tr");
+                const td = document.createElement("td");
+                td.colSpan = 9;
+                td.className = "text-center text-muted py-4";
+                td.textContent = "Chưa có đơn sản xuất nào.";
+                tr.appendChild(td);
+                body.appendChild(tr);
+                return;
+            }
+
+            orders.forEach(o => {
+                const tr = document.createElement("tr");
+
+                const idTd = document.createElement("td");
+                idTd.textContent = o.id;
+                tr.appendChild(idTd);
+
+                const codeTd = document.createElement("td");
+                codeTd.textContent = o.productCode;
+                tr.appendChild(codeTd);
+
+                const nameTd = document.createElement("td");
+                nameTd.textContent = o.productName;
+                tr.appendChild(nameTd);
+
+                const qtyTd = document.createElement("td");
+                qtyTd.className = "text-end";
+                qtyTd.textContent = formatNumber(o.Quantity);
+                tr.appendChild(qtyTd);
+
+                const weekTd = document.createElement("td");
+                weekTd.textContent = o.PlanWeek;
+                tr.appendChild(weekTd);
+
+                const yearTd = document.createElement("td");
+                yearTd.textContent = o.PlanYear;
+                tr.appendChild(yearTd);
+
+                const statusTd = document.createElement("td");
+                statusTd.innerHTML = formatStatusBadge(o.Status);
+                tr.appendChild(statusTd);
+
+                const createdTd = document.createElement("td");
+                createdTd.textContent = o.CreatedAt ? new Date(o.CreatedAt).toLocaleString("vi-VN") : "";
+                tr.appendChild(createdTd);
+
+                const actionTd = document.createElement("td");
+                actionTd.className = "text-end";
+                actionTd.innerHTML = `
+                    <button class="btn btn-sm btn-outline-primary me-1">Sửa</button>
+                    <button class="btn btn-sm btn-outline-danger">Xóa</button>
+                `;
+                const [editBtn, delBtn] = actionTd.querySelectorAll("button");
+                editBtn.addEventListener("click", () => openEditModal(o));
+                delBtn.addEventListener("click", () => onDeleteOrder(o));
+                tr.appendChild(actionTd);
+
+                body.appendChild(tr);
+            });
+        }
+
+        function resetForm() {
+            currentEditing = null;
+            document.getElementById("orderId").value = "";
+            document.getElementById("orderProductId").value = "";
+            document.getElementById("orderPlanWeek").value = "";
+            document.getElementById("orderPlanYear").value = "";
+            document.getElementById("orderQuantity").value = "";
+            document.getElementById("orderStatus").value = "INITIAL";
+        }
+
+        function openAddModal() {
+            resetForm();
+            document.getElementById("orderModalTitle").textContent = "Thêm đơn sản xuất";
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById("orderModal"));
+            modal.show();
+        }
+
+        function openEditModal(order) {
+            resetForm();
+            currentEditing = order;
+            document.getElementById("orderModalTitle").textContent = "Chỉnh sửa đơn sản xuất";
+            document.getElementById("orderId").value = order.id;
+            document.getElementById("orderProductId").value = order.ProductId || order.productId;
+            document.getElementById("orderPlanWeek").value = order.PlanWeek;
+            document.getElementById("orderPlanYear").value = order.PlanYear;
+            document.getElementById("orderQuantity").value = order.Quantity;
+            document.getElementById("orderStatus").value = order.Status || "INITIAL";
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById("orderModal"));
+            modal.show();
+        }
+
+        async function onSaveOrder() {
+            const id = document.getElementById("orderId").value;
+            const productId = document.getElementById("orderProductId").value;
+            const planWeek = document.getElementById("orderPlanWeek").value;
+            const planYear = document.getElementById("orderPlanYear").value;
+            const quantity = document.getElementById("orderQuantity").value;
+            const status = document.getElementById("orderStatus").value;
+
+            if (!productId || !planWeek || !planYear || !quantity) {
+                alert("Vui lòng nhập đầy đủ thông tin bắt buộc.");
+                return;
+            }
+
+            const payload = {
+                productId: Number(productId),
+                planWeek: Number(planWeek),
+                planYear: Number(planYear),
+                quantity: Number(quantity),
+                status
+            };
+
+            try {
+                const url = id ? `/api/production-orders/${id}` : "/api/production-orders";
+                const method = id ? "PUT" : "POST";
+                const res = await fetch(API_BASE + url, {
+                    method,
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) throw new Error(await res.text());
+                bootstrap.Modal.getOrCreateInstance(document.getElementById("orderModal")).hide();
+                await loadOrders();
+            } catch (err) {
+                console.error(err);
+                alert("Lưu đơn sản xuất thất bại.");
+            }
+        }
+
+        async function onDeleteOrder(order) {
+            if (!confirm(`Xóa đơn sản xuất #${order.id}?`)) return;
+            try {
+                const res = await fetch(API_BASE + `/api/production-orders/${order.id}`, {
+                    method: "DELETE"
+                });
+                if (!res.ok) throw new Error(await res.text());
+                await loadOrders();
+            } catch (err) {
+                console.error(err);
+                alert("Xóa đơn sản xuất thất bại.");
+            }
+        }
+
+        function initFilters() {
+            document.querySelectorAll(".pill-filter button").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    document.querySelectorAll(".pill-filter button").forEach(b => b.classList.remove("active"));
+                    btn.classList.add("active");
+                    loadOrders().catch(console.error);
+                });
+            });
+
+            ["filterProduct", "filterFromWeek", "filterFromYear", "filterToWeek", "filterToYear"].forEach(id => {
+                const el = document.getElementById(id);
+                el.addEventListener("change", () => loadOrders().catch(console.error));
+            });
+        }
+
+        async function init() {
+            await loadProducts();
+            initFilters();
+            document.getElementById("btnAddOrder").addEventListener("click", openAddModal);
+            document.getElementById("btnSaveOrder").addEventListener("click", onSaveOrder);
+            await loadOrders();
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            init().catch(err => {
+                console.error(err);
+                alert("Không tải được danh sách đơn sản xuất.");
+            });
+        });
+    </script>
+</body>
+
+</html>
+
+

@@ -504,6 +504,146 @@ app.post(
   }
 });
 
+// -------- Production Orders CRUD (for Production module) ----------
+app.get("/api/production-orders", async (req, res) => {
+  const productId = parseIntSafe(req.query.productId);
+  const status = (req.query.status || "").toUpperCase(); // INITIAL, ACTIVE, COMPLETE, empty = all
+  const fromYear = parseIntSafe(req.query.fromYear);
+  const fromWeek = parseIntSafe(req.query.fromWeek);
+  const toYear = parseIntSafe(req.query.toYear);
+  const toWeek = parseIntSafe(req.query.toWeek);
+
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+    if (productId) request.input("productId", sql.Int, productId);
+    if (fromYear) request.input("fromYear", sql.Int, fromYear);
+    if (fromWeek) request.input("fromWeek", sql.Int, fromWeek);
+    if (toYear) request.input("toYear", sql.Int, toYear);
+    if (toWeek) request.input("toWeek", sql.Int, toWeek);
+    if (status) request.input("status", sql.NVarChar, status);
+
+    const where = [];
+    if (productId) where.push("o.ProductId = @productId");
+    if (fromYear && fromWeek)
+      where.push(
+        "(o.PlanYear > @fromYear OR (o.PlanYear = @fromYear AND o.PlanWeek >= @fromWeek))"
+      );
+    if (toYear && toWeek)
+      where.push(
+        "(o.PlanYear < @toYear OR (o.PlanYear = @toYear AND o.PlanWeek <= @toWeek))"
+      );
+    if (status) where.push("UPPER(o.Status) = @status");
+
+    const whereSql = where.length ? "WHERE " + where.join(" AND ") : "";
+
+    const result = await request.query(`
+      SELECT o.ProductionOrderId AS id,
+             o.ProductId,
+             p.ProductCode AS productCode,
+             p.ProductName AS productName,
+             o.Quantity,
+             o.PlanYear,
+             o.PlanWeek,
+             o.Status,
+             o.CreatedAt
+      FROM ProductionOrders o
+      JOIN Products p ON p.ProductId = o.ProductId
+      ${whereSql}
+      ORDER BY o.PlanYear DESC, o.PlanWeek DESC, o.ProductionOrderId DESC;
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("[ProductionOrders List Error]", err);
+    res.status(500).json({ error: "Failed to fetch production orders" });
+  }
+});
+
+app.post("/api/production-orders", async (req, res) => {
+  const { productId, quantity, planYear, planWeek, status } = req.body || {};
+  if (!productId || !quantity || !planYear || !planWeek)
+    return res
+      .status(400)
+      .json({ error: "productId, quantity, planYear, planWeek are required" });
+  const normStatus = (status || "INITIAL").toUpperCase();
+  if (!["INITIAL", "ACTIVE", "COMPLETE"].includes(normStatus))
+    return res
+      .status(400)
+      .json({ error: "status must be INITIAL, ACTIVE or COMPLETE" });
+
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input("productId", sql.Int, productId)
+      .input("quantity", sql.Decimal(18, 3), quantity)
+      .input("planYear", sql.Int, planYear)
+      .input("planWeek", sql.Int, planWeek)
+      .input("status", sql.NVarChar, normStatus).query(`
+        INSERT INTO ProductionOrders (ProductId, Quantity, PlanYear, PlanWeek, Status)
+        OUTPUT INSERTED.ProductionOrderId AS id
+        VALUES (@productId, @quantity, @planYear, @planWeek, @status);
+      `);
+    res.status(201).json({ id: result.recordset[0].id });
+  } catch (err) {
+    console.error("[ProductionOrders Create Error]", err);
+    res.status(500).json({ error: "Failed to create production order" });
+  }
+});
+
+app.put("/api/production-orders/:id", async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  const { productId, quantity, planYear, planWeek, status } = req.body || {};
+  const normStatus = status ? status.toUpperCase() : null;
+  if (normStatus && !["INITIAL", "ACTIVE", "COMPLETE"].includes(normStatus))
+    return res
+      .status(400)
+      .json({ error: "status must be INITIAL, ACTIVE or COMPLETE" });
+
+  try {
+    const pool = await getPool();
+    const request = pool.request().input("id", sql.Int, id);
+    if (productId) request.input("productId", sql.Int, productId);
+    if (quantity != null)
+      request.input("quantity", sql.Decimal(18, 3), quantity);
+    if (planYear) request.input("planYear", sql.Int, planYear);
+    if (planWeek) request.input("planWeek", sql.Int, planWeek);
+    if (normStatus) request.input("status", sql.NVarChar, normStatus);
+
+    await request.query(`
+      UPDATE ProductionOrders
+      SET ProductId = COALESCE(@productId, ProductId),
+          Quantity = COALESCE(@quantity, Quantity),
+          PlanYear = COALESCE(@planYear, PlanYear),
+          PlanWeek = COALESCE(@planWeek, PlanWeek),
+          Status = COALESCE(@status, Status),
+          UpdatedAt = SYSDATETIME()
+      WHERE ProductionOrderId = @id;
+    `);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[ProductionOrders Update Error]", err);
+    res.status(500).json({ error: "Failed to update production order" });
+  }
+});
+
+app.delete("/api/production-orders/:id", async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    await pool
+      .request()
+      .input("id", sql.Int, id)
+      .query(`DELETE FROM ProductionOrders WHERE ProductionOrderId = @id;`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[ProductionOrders Delete Error]", err);
+    res.status(500).json({ error: "Failed to delete production order" });
+  }
+});
+
 // -------- Sales plan (SHIP_QTY) ----------
 app.get("/api/sales-plan", async (req, res) => {
   const productId = parseIntSafe(req.query.productId);

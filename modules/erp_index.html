@@ -42,7 +42,7 @@
             </div>
             <div class="menu-section">
                 <div class="menu-section-title" data-i18n="erp.production">Quản lý sản xuất</div>
-                <a href="#production" class="menu-item">
+                <a href="#production" class="menu-item" data-src="/modules/Production/index.html">
                     <i class="bi bi-gear-wide-connected"></i>
                     <span data-i18n="erp.productionPlan">Kế hoạch sản xuất</span>
                 </a>
@@ -163,16 +163,24 @@
                         <div class="user-avatar">NV</div>
                         <div>
                             <div style="font-weight: 600; font-size: 0.9rem;">Nguyễn Văn A</div>
-                            <small style="color: var(--secondary); font-size: 0.8rem;" data-i18n="erp.admin">Quản trị viên</small>
+                            <small style="color: var(--secondary); font-size: 0.8rem;" data-i18n="erp.admin">Quản trị
+                                viên</small>
                         </div>
                         <i class="bi bi-chevron-down" style="color: var(--secondary);"></i>
                     </div>
                     <ul class="dropdown-menu dropdown-menu-end" style="min-width: 200px;">
-                        <li><h6 class="dropdown-header" data-i18n="erp.profile">Hồ sơ</h6></li>
-                        <li><a class="dropdown-item" href="#profile" data-src="/modules/Profile/index.html"><i class="bi bi-person"></i> <span data-i18n="erp.profile">Hồ sơ</span></a></li>
-                        <li><a class="dropdown-item" href="#settings" data-src="/modules/Settings/index.html"><i class="bi bi-gear"></i> <span data-i18n="erp.settings">Cài đặt</span></a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item text-danger" href="#logout"><i class="bi bi-box-arrow-right"></i> <span data-i18n="erp.logout">Đăng xuất</span></a></li>
+                        <li>
+                            <h6 class="dropdown-header" data-i18n="erp.profile">Hồ sơ</h6>
+                        </li>
+                        <li><a class="dropdown-item" href="#profile" data-src="/modules/Profile/index.html"><i
+                                    class="bi bi-person"></i> <span data-i18n="erp.profile">Hồ sơ</span></a></li>
+                        <li><a class="dropdown-item" href="#settings" data-src="/modules/Settings/index.html"><i
+                                    class="bi bi-gear"></i> <span data-i18n="erp.settings">Cài đặt</span></a></li>
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
+                        <li><a class="dropdown-item text-danger" href="#logout"><i class="bi bi-box-arrow-right"></i>
+                                <span data-i18n="erp.logout">Đăng xuất</span></a></li>
                     </ul>
                 </div>
             </div>
@@ -300,49 +308,56 @@
                                     <i class="bi bi-gear-wide-connected"></i>
                                 </div>
                                 <h5 data-i18n="erp.productionManagement">Quản lý sản xuất</h5>
-                                <p data-i18n="erp.productionManagementDesc">Theo dõi và quản lý quy trình sản xuất, kế hoạch sản xuất</p>
+                                <p data-i18n="erp.productionManagementDesc">Theo dõi và quản lý quy trình sản xuất, kế
+                                    hoạch sản xuất</p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-boxes"></i>
                                 </div>
                                 <h5 data-i18n="erp.inventoryManagement">Quản lý kho</h5>
-                                <p data-i18n="erp.inventoryManagementDesc">Kiểm soát tồn kho, nhập xuất hàng hóa, điều chuyển kho</p>
+                                <p data-i18n="erp.inventoryManagementDesc">Kiểm soát tồn kho, nhập xuất hàng hóa, điều
+                                    chuyển kho</p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-graph-up-arrow"></i>
                                 </div>
                                 <h5 data-i18n="erp.salesManagement">Bán hàng</h5>
-                                <p data-i18n="erp.salesManagementDesc">Quản lý đơn hàng, khách hàng, báo giá và hợp đồng</p>
+                                <p data-i18n="erp.salesManagementDesc">Quản lý đơn hàng, khách hàng, báo giá và hợp đồng
+                                </p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-cart-plus"></i>
                                 </div>
                                 <h5 data-i18n="erp.purchasingManagement">Mua hàng</h5>
-                                <p data-i18n="erp.purchasingManagementDesc">Quản lý đơn mua hàng, nhà cung cấp, hợp đồng mua</p>
+                                <p data-i18n="erp.purchasingManagementDesc">Quản lý đơn mua hàng, nhà cung cấp, hợp đồng
+                                    mua</p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-calculator"></i>
                                 </div>
                                 <h5 data-i18n="erp.accountingManagement">Kế toán</h5>
-                                <p data-i18n="erp.accountingManagementDesc">Quản lý tài chính, công nợ, báo cáo tài chính</p>
+                                <p data-i18n="erp.accountingManagementDesc">Quản lý tài chính, công nợ, báo cáo tài
+                                    chính</p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-shield-check"></i>
                                 </div>
                                 <h5 data-i18n="erp.qualityManagement">Chất lượng</h5>
-                                <p data-i18n="erp.qualityManagementDesc">Kiểm tra chất lượng sản phẩm, quy trình QC/QA</p>
+                                <p data-i18n="erp.qualityManagementDesc">Kiểm tra chất lượng sản phẩm, quy trình QC/QA
+                                </p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
                                     <i class="bi bi-tools"></i>
                                 </div>
                                 <h5 data-i18n="erp.maintenanceManagement">Bảo trì</h5>
-                                <p data-i18n="erp.maintenanceManagementDesc">Bảo trì thiết bị, máy móc, lịch bảo dưỡng</p>
+                                <p data-i18n="erp.maintenanceManagementDesc">Bảo trì thiết bị, máy móc, lịch bảo dưỡng
+                                </p>
                             </div>
                             <div class="module-card">
                                 <div class="module-icon">
@@ -367,9 +382,11 @@
                                 <i class="bi bi-check-circle"></i>
                             </div>
                             <div class="activity-content">
-                                <h6 data-i18n="erp.orderCompleted" data-i18n-params='{"orderId":"1234"}'>Hoàn thành đơn hàng #1234</h6>
+                                <h6 data-i18n="erp.orderCompleted" data-i18n-params='{"orderId":"1234"}'>Hoàn thành đơn
+                                    hàng #1234</h6>
                                 <p data-i18n="erp.orderDelivered">Đơn hàng đã được giao thành công</p>
-                                <div class="activity-time" data-i18n="erp.minutesAgo" data-i18n-params='{"minutes":5}'>5 phút trước</div>
+                                <div class="activity-time" data-i18n="erp.minutesAgo" data-i18n-params='{"minutes":5}'>5
+                                    phút trước</div>
                             </div>
                         </div>
                         <div class="activity-item">
@@ -379,7 +396,8 @@
                             <div class="activity-content">
                                 <h6 data-i18n="erp.lowStockWarning">Cảnh báo tồn kho thấp</h6>
                                 <p data-i18n="erp.materialRunningOut">Nguyên liệu A sắp hết, cần nhập thêm</p>
-                                <div class="activity-time" data-i18n="erp.minutesAgo" data-i18n-params='{"minutes":15}'>15 phút trước</div>
+                                <div class="activity-time" data-i18n="erp.minutesAgo" data-i18n-params='{"minutes":15}'>
+                                    15 phút trước</div>
                             </div>
                         </div>
                         <div class="activity-item">
@@ -388,8 +406,10 @@
                             </div>
                             <div class="activity-content">
                                 <h6 data-i18n="erp.orderDelayedTitle">Đơn hàng chậm tiến độ</h6>
-                                <p data-i18n="erp.orderNeedsUrgent" data-i18n-params='{"orderId":"1230"}'>Đơn hàng #1230 cần được xử lý gấp</p>
-                                <div class="activity-time" data-i18n="erp.hoursAgo" data-i18n-params='{"hours":1}'>1 giờ trước</div>
+                                <p data-i18n="erp.orderNeedsUrgent" data-i18n-params='{"orderId":"1230"}'>Đơn hàng #1230
+                                    cần được xử lý gấp</p>
+                                <div class="activity-time" data-i18n="erp.hoursAgo" data-i18n-params='{"hours":1}'>1 giờ
+                                    trước</div>
                             </div>
                         </div>
                         <div class="activity-item">
@@ -398,8 +418,10 @@
                             </div>
                             <div class="activity-content">
                                 <h6 data-i18n="erp.warehouseReceiptSuccess">Nhập kho thành công</h6>
-                                <p data-i18n="erp.productsReceived" data-i18n-params='{"qty":500}'>Đã nhập 500 sản phẩm vào kho A</p>
-                                <div class="activity-time" data-i18n="erp.hoursAgo" data-i18n-params='{"hours":2}'>2 giờ trước</div>
+                                <p data-i18n="erp.productsReceived" data-i18n-params='{"qty":500}'>Đã nhập 500 sản phẩm
+                                    vào kho A</p>
+                                <div class="activity-time" data-i18n="erp.hoursAgo" data-i18n-params='{"hours":2}'>2 giờ
+                                    trước</div>
                             </div>
                         </div>
                         <div class="activity-item">
@@ -408,8 +430,10 @@
                             </div>
                             <div class="activity-content">
                                 <h6 data-i18n="erp.newUserAdded">Thêm người dùng mới</h6>
-                                <p data-i18n="erp.userAddedToSystem" data-i18n-params='{"name":"Nguyễn Văn B"}'>Nguyễn Văn B đã được thêm vào hệ thống</p>
-                                <div class="activity-time" data-i18n="erp.hoursAgo" data-i18n-params='{"hours":3}'>3 giờ trước</div>
+                                <p data-i18n="erp.userAddedToSystem" data-i18n-params='{"name":"Nguyễn Văn B"}'>Nguyễn
+                                    Văn B đã được thêm vào hệ thống</p>
+                                <div class="activity-time" data-i18n="erp.hoursAgo" data-i18n-params='{"hours":3}'>3 giờ
+                                    trước</div>
                             </div>
                         </div>
                     </div>
@@ -543,13 +567,13 @@
         }
 
         // Language selection is now handled in Settings page
-        
+
         // Listen for messages from iframe (Settings page, Profile page, etc.)
         window.addEventListener('message', async (event) => {
             // Security: only accept messages from same origin
             // In production, you might want to check event.origin
             if (!event.data || !event.data.type) return;
-            
+
             if (event.data.type === 'languageChanged' || event.data.type === 'settingsSaved') {
                 const newLang = event.data.lang || event.data.language;
                 if (window.I18n && newLang && ['vi', 'en', 'ko'].includes(newLang)) {
@@ -559,7 +583,7 @@
                 }
             }
         });
-        
+
         // Listen for language changes to update ERP portal (local changes)
         document.addEventListener('languageChanged', () => {
             // i18n service will automatically update all elements with data-i18n
