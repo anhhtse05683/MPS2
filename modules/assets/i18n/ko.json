@@ -43,8 +43,8 @@
     "productTableDesc": "SHIP_QTY를 입력하여 즉시 계산",
     "materialTable": "자재 테이블",
     "materialTableDesc": "BOM 및 CONFIRM된 구매 주문서에서 계산",
-    "productCode": "제품 코드",
-    "materialCode": "자재 코드",
+    "product": "제품 코드",
+    "material": "자재 코드",
     "item": "항목",
     "shipQty": "SHIP_QTY",
     "proQty": "Pro_QTY",
@@ -313,4 +313,3 @@
     "confirmCancel": "취소하시겠습니까? 저장되지 않은 변경사항은 손실됩니다."
   }
 }
-

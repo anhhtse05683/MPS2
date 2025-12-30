@@ -43,8 +43,8 @@
     "productTableDesc": "Nhập SHIP_QTY để tính tức thời",
     "materialTable": "Material Table",
     "materialTableDesc": "Tính theo BOM và phiếu mua CONFIRM",
-    "productCode": "Product Code",
-    "materialCode": "Material Code",
+    "product": "Product",
+    "material": "Material",
     "item": "Item",
     "shipQty": "SHIP_QTY",
     "proQty": "Pro_QTY",
@@ -313,4 +313,3 @@
     "confirmCancel": "Bạn có chắc muốn hủy? Các thay đổi chưa lưu sẽ bị mất."
   }
 }
-

@@ -43,8 +43,8 @@
     "productTableDesc": "Enter SHIP_QTY to calculate instantly",
     "materialTable": "Material Table",
     "materialTableDesc": "Calculated from BOM and CONFIRMED purchase orders",
-    "productCode": "Product Code",
-    "materialCode": "Material Code",
+    "product": "Product",
+    "material": "Material",
     "item": "Item",
     "shipQty": "SHIP_QTY",
     "proQty": "Pro_QTY",
@@ -313,4 +313,3 @@
     "confirmCancel": "Are you sure you want to cancel? Unsaved changes will be lost."
   }
 }
-

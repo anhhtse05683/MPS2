@@ -286,8 +286,8 @@
         function renderHeaders(weeks, headerEl) {
             headerEl.innerHTML = "";
             const staticCols = headerEl.id === "productHeader"
-                ? [window.I18n?.t("mps.productCode") || "Product Code", window.I18n?.t("mps.item") || "Item"]
-                : [window.I18n?.t("mps.materialCode") || "Material Code", window.I18n?.t("mps.item") || "Item"];
+                ? [window.I18n?.t("mps.product") || "Product", window.I18n?.t("mps.item") || "Item"]
+                : [window.I18n?.t("mps.material") || "Material", window.I18n?.t("mps.item") || "Item"];
             staticCols.forEach(text => {
                 const th = document.createElement("th");
                 th.className = "text-center";
@@ -361,21 +361,33 @@
         function renderMaterialTable(materialRows, weeks) {
             const body = document.getElementById("materialBody");
             body.innerHTML = "";
+
             materialRows.forEach(row => {
                 const items = [
                     { label: window.I18n?.t("mps.stockInQty") || "Stock_In_Qty", values: row.stockIn },
                     { label: window.I18n?.t("mps.stockOutQty") || "Stock_Out_Qty", values: row.stockOut },
                     { label: window.I18n?.t("mps.balance") || "Balance", values: row.balance, highlightNegative: true, secondary: true }
                 ];
+
                 items.forEach((item, itemIdx) => {
                     const tr = document.createElement("tr");
+
+                    // First column for material rows: Code / Name / Consume per unit
+                    const nameTd = document.createElement("td");
                     if (itemIdx === 0) {
-                        const nameTd = document.createElement("td");
-                        nameTd.rowSpan = 3;
-                        nameTd.className = "fw-semibold text-center align-middle";
+                        // Material code
                         nameTd.textContent = row.material.code;
-                        tr.appendChild(nameTd);
+                    } else if (itemIdx === 1) {
+                        // Material name
+                        nameTd.textContent = row.material.name || row.material.code;
+                    } else if (itemIdx === 2) {
+                        // Consumption per finished product unit from BOM
+                        const cons = row.material.consume;
+                        nameTd.textContent = cons != null ? `QTY: ${cons}` : "";
                     }
+                    nameTd.className = "fw-semibold text-center align-middle";
+                    tr.appendChild(nameTd);
+
                     const itemTd = document.createElement("td");
                     itemTd.textContent = item.label;
                     itemTd.className = "text-center item-col";
@@ -388,6 +400,7 @@
                         if (item.highlightNegative && val < 0) td.classList.add("text-negative");
                         tr.appendChild(td);
                     });
+
                     if (item.secondary) tr.classList.add("table-secondary-row");
                     body.appendChild(tr);
                 });
