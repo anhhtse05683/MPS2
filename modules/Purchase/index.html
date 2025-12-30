@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="purchase.title">Quản lý Mua hàng</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="/modules/assets/js/i18n.js"></script>
+    <style>
+        body {
+            background: #f8fafc;
+            padding: 1.5rem;
+        }
+
+        .card {
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+            border: none;
+        }
+
+        .toolbar {
+            gap: 0.5rem;
+        }
+
+        .badge-status {
+            font-size: 0.75rem;
+            padding: 0.35em 0.65em;
+        }
+
+        .badge-status.INITIAL {
+            background-color: #e5e7eb;
+            color: #111827;
+        }
+
+        .badge-status.CONFIRM {
+            background-color: #2563eb;
+            color: #fff;
+        }
+
+        .badge-status.RECEIVED {
+            background-color: #16a34a;
+            color: #fff;
+        }
+
+        .badge-status.CANCELLED {
+            background-color: #dc2626;
+            color: #fff;
+        }
+
+        .table thead {
+            background: #f1f5f9;
+        }
+
+        .table thead th {
+            border-bottom-width: 1px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+
+        .table tbody tr {
+            transition: background-color 0.15s;
+        }
+
+        .table tbody tr:hover {
+            background-color: #f8fafc;
+            cursor: pointer;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 4px;
+        }
+
+        .status-dot.INITIAL {
+            background-color: #9ca3af;
+        }
+
+        .status-dot.CONFIRM {
+            background-color: #2563eb;
+        }
+
+        .status-dot.RECEIVED {
+            background-color: #16a34a;
+        }
+
+        .status-dot.CANCELLED {
+            background-color: #dc2626;
+        }
+
+        .pill-filter button.active {
+            background-color: #2563eb;
+            color: #fff;
+            border-color: #2563eb;
+        }
+
+        .amount-cell {
+            font-weight: 600;
+            color: #059669;
+        }
+
+        .po-link {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .po-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div>
+                    <h4 class="mb-0" data-i18n="purchase.title">Quản lý Mua hàng</h4>
+                    <small class="text-muted" data-i18n="purchase.subtitle">Quản lý phiếu mua hàng và đơn đặt
+                        hàng</small>
+                </div>
+                <div class="d-flex toolbar align-items-center flex-wrap">
+                    <input id="searchInput" type="text" class="form-control form-control-sm" style="max-width: 200px;"
+                        data-i18n="purchase.searchPlaceholder" placeholder="Tìm PO, Invoice, NCC...">
+                    <div class="btn-group pill-filter" role="group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm active" data-status=""
+                            data-i18n="purchase.allStatus">Tất cả</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-status="INITIAL"
+                            data-i18n="purchase.status.INITIAL">INITIAL</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-status="CONFIRM"
+                            data-i18n="purchase.status.CONFIRM">CONFIRM</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-status="RECEIVED"
+                            data-i18n="purchase.status.RECEIVED">RECEIVED</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-status="CANCELLED"
+                            data-i18n="purchase.status.CANCELLED">CANCELLED</button>
+                    </div>
+                    <button id="btnAdd" class="btn btn-primary btn-sm">
+                        <i class="bi bi-plus-lg"></i> <span data-i18n="purchase.addOrder">Thêm phiếu mua hàng</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th data-i18n="purchase.table.orderId">Mã đơn</th>
+                            <th data-i18n="purchase.table.poNumber">Số PO</th>
+                            <th data-i18n="purchase.table.invoiceNumber">Số Invoice</th>
+                            <th data-i18n="purchase.table.supplier">Nhà cung cấp</th>
+                            <th data-i18n="purchase.table.customerCode">Mã KH</th>
+                            <th data-i18n="purchase.table.warehouseCode">Mã kho</th>
+                            <th data-i18n="purchase.table.currency">Tiền tệ</th>
+                            <th class="text-end" data-i18n="purchase.table.totalAmount">Tổng tiền</th>
+                            <th data-i18n="purchase.table.status">Trạng thái</th>
+                            <th data-i18n="purchase.table.createdBy">Người tạo</th>
+                            <th data-i18n="purchase.table.createdAt">Ngày tạo</th>
+                            <th class="text-center" data-i18n="purchase.table.actions">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ordersBody">
+                        <tr>
+                            <td colspan="12" class="text-center text-muted py-4">
+                                <div class="spinner-border spinner-border-sm" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let orders = [];
+        let materials = [];
+
+        // Format number
+        function formatNumber(num) {
+            if (num == null || num === undefined) return "0";
+            return parseFloat(num).toLocaleString("vi-VN", {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 3,
+            });
+        }
+
+        // Format currency
+        function formatCurrency(num, currency = "VND") {
+            if (num == null || num === undefined) return "0";
+            const formatted = parseFloat(num).toLocaleString("vi-VN", {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0,
+            });
+            return `${formatted} ${currency}`;
+        }
+
+        // Format date
+        function formatDate(dateStr) {
+            if (!dateStr) return "-";
+            const d = new Date(dateStr);
+            return d.toLocaleDateString("vi-VN");
+        }
+
+        // Fetch JSON helper
+        async function fetchJson(url, options = {}) {
+            try {
+                const res = await fetch(url, options);
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ error: "Request failed" }));
+                    throw new Error(err.error || "Request failed");
+                }
+                return await res.json();
+            } catch (err) {
+                console.error("[Fetch Error]", err);
+                throw err;
+            }
+        }
+
+        // Load materials for dropdown
+        async function loadMaterials() {
+            try {
+                materials = await fetchJson("/api/items?type=M");
+            } catch (err) {
+                console.error("Failed to load materials:", err);
+                materials = [];
+            }
+        }
+
+        // Load orders
+        async function loadOrders() {
+            try {
+                const params = new URLSearchParams();
+                const search = document.getElementById("searchInput").value.trim();
+                const activeStatusBtn = document.querySelector(".pill-filter button.active");
+                const status = activeStatusBtn ? activeStatusBtn.dataset.status : "";
+
+                if (status) params.append("status", status);
+                if (search) {
+                    params.append("supplierName", search);
+                    params.append("poNumber", search);
+                }
+
+                orders = await fetchJson("/api/purchase-orders" + (params.toString() ? `?${params.toString()}` : ""));
+                renderOrders();
+            } catch (err) {
+                console.error("Failed to load orders:", err);
+                const body = document.getElementById("ordersBody");
+                const errorMsg = (window.I18n?.t("purchase.loadError") || "Lỗi tải dữ liệu: ") + err.message;
+                body.innerHTML = `<tr><td colspan="12" class="text-center text-danger py-4">${errorMsg}</td></tr>`;
+            }
+        }
+
+        // Render orders table
+        function renderOrders() {
+            const body = document.getElementById("ordersBody");
+            body.innerHTML = "";
+            if (!orders.length) {
+                const tr = document.createElement("tr");
+                const td = document.createElement("td");
+                td.colSpan = 12;
+                td.className = "text-center text-muted py-4";
+                td.textContent = window.I18n?.t("purchase.noOrders") || "Chưa có phiếu mua hàng nào.";
+                tr.appendChild(td);
+                body.appendChild(tr);
+                return;
+            }
+
+            orders.forEach(o => {
+                const tr = document.createElement("tr");
+                tr.style.cursor = "pointer";
+                tr.addEventListener("click", () => {
+                    window.location.href = `/modules/Purchase/detail.html?id=${o.id}`;
+                });
+
+                // Mã đơn
+                const idTd = document.createElement("td");
+                idTd.innerHTML = `<a href="/modules/Purchase/detail.html?id=${o.id}" class="po-link" onclick="event.stopPropagation()">#${o.id}</a>`;
+                tr.appendChild(idTd);
+
+                // Số PO
+                const poTd = document.createElement("td");
+                poTd.textContent = o.PONumber || "-";
+                tr.appendChild(poTd);
+
+                // Số Invoice
+                const invTd = document.createElement("td");
+                invTd.textContent = o.InvoiceNumber || "-";
+                tr.appendChild(invTd);
+
+                // Nhà cung cấp
+                const supplierTd = document.createElement("td");
+                supplierTd.textContent = o.SupplierName || "-";
+                tr.appendChild(supplierTd);
+
+                // Mã KH
+                const custTd = document.createElement("td");
+                custTd.textContent = o.CustomerCode || "-";
+                tr.appendChild(custTd);
+
+                // Mã kho
+                const whTd = document.createElement("td");
+                whTd.textContent = o.WarehouseCode || "-";
+                tr.appendChild(whTd);
+
+                // Tiền tệ
+                const currTd = document.createElement("td");
+                currTd.textContent = o.Currency || "VND";
+                tr.appendChild(currTd);
+
+                // Tổng tiền
+                const amountTd = document.createElement("td");
+                amountTd.className = "text-end amount-cell";
+                amountTd.textContent = formatCurrency(o.TotalAmount || 0, o.Currency || "VND");
+                tr.appendChild(amountTd);
+
+                // Trạng thái
+                const statusTd = document.createElement("td");
+                const statusBadge = document.createElement("span");
+                statusBadge.className = `badge badge-status ${o.Status}`;
+                const statusText = window.I18n?.t(`purchase.status.${o.Status}`) || o.Status;
+                statusBadge.innerHTML = `<span class="status-dot ${o.Status}"></span>${statusText}`;
+                statusTd.appendChild(statusBadge);
+                tr.appendChild(statusTd);
+
+                // Người tạo
+                const creatorTd = document.createElement("td");
+                creatorTd.textContent = o.CreatedBy || "-";
+                tr.appendChild(creatorTd);
+
+                // Ngày tạo
+                const dateTd = document.createElement("td");
+                dateTd.textContent = formatDate(o.CreatedAt);
+                tr.appendChild(dateTd);
+
+                // Thao tác
+                const actionTd = document.createElement("td");
+                actionTd.className = "text-center";
+                actionTd.onclick = (e) => e.stopPropagation();
+                const editBtn = document.createElement("button");
+                editBtn.className = "btn btn-sm btn-outline-primary me-1";
+                editBtn.innerHTML = '<i class="bi bi-pencil"></i>';
+                editBtn.title = window.I18n?.t("purchase.edit") || "Sửa";
+                editBtn.onclick = () => {
+                    window.location.href = `/modules/Purchase/detail.html?id=${o.id}`;
+                };
+                const deleteBtn = document.createElement("button");
+                deleteBtn.className = "btn btn-sm btn-outline-danger";
+                deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
+                deleteBtn.title = window.I18n?.t("purchase.delete") || "Xóa";
+                deleteBtn.onclick = async () => {
+                    const confirmMsg = (window.I18n?.t("purchase.confirmDelete") || "Bạn có chắc muốn xóa phiếu mua hàng #{{id}}?").replace("{{id}}", o.id);
+                    if (confirm(confirmMsg)) {
+                        try {
+                            await fetchJson(`/api/purchase-orders/${o.id}`, { method: "DELETE" });
+                            loadOrders();
+                        } catch (err) {
+                            alert((window.I18n?.t("purchase.deleteFailed") || "Xóa thất bại: ") + err.message);
+                        }
+                    }
+                };
+                actionTd.appendChild(editBtn);
+                actionTd.appendChild(deleteBtn);
+                tr.appendChild(actionTd);
+
+                body.appendChild(tr);
+            });
+        }
+
+        // Event listeners
+        document.getElementById("btnAdd").addEventListener("click", () => {
+            window.location.href = "/modules/Purchase/detail.html";
+        });
+
+        document.getElementById("searchInput").addEventListener("input", () => {
+            clearTimeout(window.searchTimeout);
+            window.searchTimeout = setTimeout(loadOrders, 500);
+        });
+
+        document.querySelectorAll(".pill-filter button").forEach(btn => {
+            btn.addEventListener("click", () => {
+                document.querySelectorAll(".pill-filter button").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                loadOrders();
+            });
+        });
+
+        // Initialize
+        loadMaterials();
+        loadOrders();
+    </script>
+</body>
+
+</html>

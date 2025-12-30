@@ -163,7 +163,7 @@ app.get("/api/production", async (req, res) => {
   }
 });
 
-// -------- Purchase (CONFIRM) ----------
+// -------- Purchase (CONFIRM) - for MPS module ----------
 app.get("/api/purchase", async (req, res) => {
   const materialId = parseIntSafe(req.query.materialId);
   const fromYear = parseIntSafe(req.query.fromYear);
@@ -186,7 +186,7 @@ app.get("/api/purchase", async (req, res) => {
         SELECT pol.MaterialId AS materialId, pol.EtaYear AS year, pol.EtaWeek AS week, SUM(pol.Quantity) AS qty
         FROM PurchaseOrderLines pol
         JOIN PurchaseOrders po ON po.PurchaseOrderId = pol.PurchaseOrderId
-        WHERE po.Status = 'CONFIRM'
+        WHERE UPPER(po.Status) = 'CONFIRM'
           AND (pol.EtaYear > @fromYear OR (pol.EtaYear = @fromYear AND pol.EtaWeek >= @fromWeek))
           AND (pol.EtaYear < @toYear OR (pol.EtaYear = @toYear AND pol.EtaWeek <= @toWeek))
           AND (@materialId IS NULL OR pol.MaterialId = @materialId)
@@ -641,6 +641,358 @@ app.delete("/api/production-orders/:id", async (req, res) => {
   } catch (err) {
     console.error("[ProductionOrders Delete Error]", err);
     res.status(500).json({ error: "Failed to delete production order" });
+  }
+});
+
+// -------- Purchase Orders CRUD (for Purchase module) ----------
+app.get("/api/purchase-orders", async (req, res) => {
+  const status = (req.query.status || "").toUpperCase(); // INITIAL, CONFIRM, RECEIVED, CANCELLED, empty = all
+  const supplierName = req.query.supplierName || "";
+  const poNumber = req.query.poNumber || "";
+
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+    const where = [];
+    if (status) {
+      request.input("status", sql.NVarChar, status);
+      where.push("UPPER(po.Status) = @status");
+    }
+    if (supplierName) {
+      request.input("supplierName", sql.NVarChar, `%${supplierName}%`);
+      where.push("po.SupplierName LIKE @supplierName");
+    }
+    if (poNumber) {
+      request.input("poNumber", sql.NVarChar, `%${poNumber}%`);
+      where.push("po.PONumber LIKE @poNumber");
+    }
+
+    const whereSql = where.length ? "WHERE " + where.join(" AND ") : "";
+
+    const result = await request.query(`
+      SELECT po.PurchaseOrderId AS id,
+             po.PONumber,
+             po.InvoiceNumber,
+             po.SupplierName,
+             po.CustomerCode,
+             po.WarehouseCode,
+             po.Currency,
+             po.InvoiceDate,
+             po.TotalAmount,
+             po.Status,
+             po.CreatedBy,
+             po.AssignedTo,
+             po.CreatedAt,
+             po.UpdatedAt,
+             (SELECT COUNT(*) FROM PurchaseOrderLines pol WHERE pol.PurchaseOrderId = po.PurchaseOrderId) AS lineCount
+      FROM PurchaseOrders po
+      ${whereSql}
+      ORDER BY po.CreatedAt DESC, po.PurchaseOrderId DESC;
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("[PurchaseOrders List Error]", err);
+    res.status(500).json({ error: "Failed to fetch purchase orders" });
+  }
+});
+
+app.get("/api/purchase-orders/:id", async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input("id", sql.Int, id)
+      .query(`
+        SELECT po.PurchaseOrderId AS id,
+               po.PONumber,
+               po.InvoiceNumber,
+               po.SupplierName,
+               po.CustomerCode,
+               po.WarehouseCode,
+               po.Currency,
+               po.InvoiceDate,
+               po.TotalAmount,
+               po.Status,
+               po.CreatedBy,
+               po.AssignedTo,
+               po.CreatedAt,
+               po.UpdatedAt
+        FROM PurchaseOrders po
+        WHERE po.PurchaseOrderId = @id;
+      `);
+    if (!result.recordset.length)
+      return res.status(404).json({ error: "Purchase order not found" });
+    res.json(result.recordset[0]);
+  } catch (err) {
+    console.error("[PurchaseOrder Detail Error]", err);
+    res.status(500).json({ error: "Failed to fetch purchase order" });
+  }
+});
+
+app.get("/api/purchase-orders/:id/lines", async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input("id", sql.Int, id)
+      .query(`
+        SELECT pol.PurchaseOrderLineId AS id,
+               pol.PurchaseOrderId,
+               pol.MaterialId,
+               m.MaterialCode,
+               m.MaterialName,
+               pol.Quantity,
+               pol.Unit,
+               pol.UnitPrice,
+               pol.TotalAmount,
+               pol.EtaYear,
+               pol.EtaWeek
+        FROM PurchaseOrderLines pol
+        JOIN Materials m ON m.MaterialId = pol.MaterialId
+        WHERE pol.PurchaseOrderId = @id
+        ORDER BY pol.PurchaseOrderLineId;
+      `);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("[PurchaseOrderLines Error]", err);
+    res.status(500).json({ error: "Failed to fetch purchase order lines" });
+  }
+});
+
+app.post("/api/purchase-orders", async (req, res) => {
+  const {
+    poNumber,
+    invoiceNumber,
+    supplierName,
+    customerCode,
+    warehouseCode,
+    currency,
+    invoiceDate,
+    status,
+    createdBy,
+    assignedTo,
+    lines,
+  } = req.body || {};
+  const normStatus = (status || "INITIAL").toUpperCase();
+  if (!["INITIAL", "CONFIRM", "RECEIVED", "CANCELLED"].includes(normStatus))
+    return res
+      .status(400)
+      .json({ error: "status must be INITIAL, CONFIRM, RECEIVED or CANCELLED" });
+  if (!Array.isArray(lines) || !lines.length)
+    return res.status(400).json({ error: "lines array is required" });
+
+  let transaction;
+  try {
+    const pool = await getPool();
+    transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    const request = new sql.Request(transaction);
+
+    // Calculate total amount from lines
+    const totalAmount = lines.reduce(
+      (sum, line) => sum + (parseFloat(line.totalAmount) || 0),
+      0
+    );
+
+    // Insert PurchaseOrder
+    request
+      .input("poNumber", sql.NVarChar, poNumber || null)
+      .input("invoiceNumber", sql.NVarChar, invoiceNumber || null)
+      .input("supplierName", sql.NVarChar, supplierName || null)
+      .input("customerCode", sql.NVarChar, customerCode || null)
+      .input("warehouseCode", sql.NVarChar, warehouseCode || null)
+      .input("currency", sql.NVarChar, currency || "VND")
+      .input("invoiceDate", sql.Date, invoiceDate || null)
+      .input("totalAmount", sql.Decimal(18, 2), totalAmount)
+      .input("status", sql.NVarChar, normStatus)
+      .input("createdBy", sql.NVarChar, createdBy || null)
+      .input("assignedTo", sql.NVarChar, assignedTo || null);
+
+    const poResult = await request.query(`
+      INSERT INTO PurchaseOrders (PONumber, InvoiceNumber, SupplierName, CustomerCode, WarehouseCode, Currency, InvoiceDate, TotalAmount, Status, CreatedBy, AssignedTo)
+      OUTPUT INSERTED.PurchaseOrderId AS id
+      VALUES (@poNumber, @invoiceNumber, @supplierName, @customerCode, @warehouseCode, @currency, @invoiceDate, @totalAmount, @status, @createdBy, @assignedTo);
+    `);
+    const poId = poResult.recordset[0].id;
+
+    // Insert PurchaseOrderLines
+    for (const line of lines) {
+      const lineRequest = new sql.Request(transaction);
+      lineRequest
+        .input("purchaseOrderId", sql.Int, poId)
+        .input("materialId", sql.Int, line.materialId)
+        .input("quantity", sql.Decimal(18, 3), line.quantity)
+        .input("unit", sql.NVarChar, line.unit || "PCS")
+        .input("unitPrice", sql.Decimal(18, 2), line.unitPrice || 0)
+        .input("totalAmount", sql.Decimal(18, 2), line.totalAmount || 0)
+        .input("etaYear", sql.Int, line.etaYear)
+        .input("etaWeek", sql.Int, line.etaWeek);
+      await lineRequest.query(`
+        INSERT INTO PurchaseOrderLines (PurchaseOrderId, MaterialId, Quantity, Unit, UnitPrice, TotalAmount, EtaYear, EtaWeek)
+        VALUES (@purchaseOrderId, @materialId, @quantity, @unit, @unitPrice, @totalAmount, @etaYear, @etaWeek);
+      `);
+    }
+
+    await transaction.commit();
+    res.status(201).json({ id: poId });
+  } catch (err) {
+    console.error("[PurchaseOrders Create Error]", err);
+    try {
+      if (transaction) await transaction.rollback();
+    } catch (_) {}
+    res.status(500).json({ error: "Failed to create purchase order" });
+  }
+});
+
+app.put("/api/purchase-orders/:id", async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  const {
+    poNumber,
+    invoiceNumber,
+    supplierName,
+    customerCode,
+    warehouseCode,
+    currency,
+    invoiceDate,
+    status,
+    createdBy,
+    assignedTo,
+    lines,
+  } = req.body || {};
+  const normStatus = status ? status.toUpperCase() : null;
+  if (normStatus && !["INITIAL", "CONFIRM", "RECEIVED", "CANCELLED"].includes(normStatus))
+    return res
+      .status(400)
+      .json({ error: "status must be INITIAL, CONFIRM, RECEIVED or CANCELLED" });
+
+  let transaction;
+  try {
+    const pool = await getPool();
+    transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    const request = new sql.Request(transaction).input("id", sql.Int, id);
+
+    // Update PurchaseOrder
+    const updates = [];
+    if (poNumber !== undefined) {
+      request.input("poNumber", sql.NVarChar, poNumber || null);
+      updates.push("PONumber = @poNumber");
+    }
+    if (invoiceNumber !== undefined) {
+      request.input("invoiceNumber", sql.NVarChar, invoiceNumber || null);
+      updates.push("InvoiceNumber = @invoiceNumber");
+    }
+    if (supplierName !== undefined) {
+      request.input("supplierName", sql.NVarChar, supplierName || null);
+      updates.push("SupplierName = @supplierName");
+    }
+    if (customerCode !== undefined) {
+      request.input("customerCode", sql.NVarChar, customerCode || null);
+      updates.push("CustomerCode = @customerCode");
+    }
+    if (warehouseCode !== undefined) {
+      request.input("warehouseCode", sql.NVarChar, warehouseCode || null);
+      updates.push("WarehouseCode = @warehouseCode");
+    }
+    if (currency !== undefined) {
+      request.input("currency", sql.NVarChar, currency || "VND");
+      updates.push("Currency = @currency");
+    }
+    if (invoiceDate !== undefined) {
+      request.input("invoiceDate", sql.Date, invoiceDate || null);
+      updates.push("InvoiceDate = @invoiceDate");
+    }
+    if (status !== undefined) {
+      request.input("status", sql.NVarChar, normStatus);
+      updates.push("Status = @status");
+    }
+    if (createdBy !== undefined) {
+      request.input("createdBy", sql.NVarChar, createdBy || null);
+      updates.push("CreatedBy = @createdBy");
+    }
+    if (assignedTo !== undefined) {
+      request.input("assignedTo", sql.NVarChar, assignedTo || null);
+      updates.push("AssignedTo = @assignedTo");
+    }
+
+    if (updates.length) {
+      updates.push("UpdatedAt = SYSDATETIME()");
+      await request.query(`
+        UPDATE PurchaseOrders
+        SET ${updates.join(", ")}
+        WHERE PurchaseOrderId = @id;
+      `);
+    }
+
+    // Update lines if provided
+    if (lines && Array.isArray(lines)) {
+      // Delete existing lines
+      await request.query(`
+        DELETE FROM PurchaseOrderLines WHERE PurchaseOrderId = @id;
+      `);
+
+      // Insert new lines
+      for (const line of lines) {
+        const lineRequest = new sql.Request(transaction);
+        lineRequest
+          .input("purchaseOrderId", sql.Int, id)
+          .input("materialId", sql.Int, line.materialId)
+          .input("quantity", sql.Decimal(18, 3), line.quantity)
+          .input("unit", sql.NVarChar, line.unit || "PCS")
+          .input("unitPrice", sql.Decimal(18, 2), line.unitPrice || 0)
+          .input("totalAmount", sql.Decimal(18, 2), line.totalAmount || 0)
+          .input("etaYear", sql.Int, line.etaYear)
+          .input("etaWeek", sql.Int, line.etaWeek);
+        await lineRequest.query(`
+          INSERT INTO PurchaseOrderLines (PurchaseOrderId, MaterialId, Quantity, Unit, UnitPrice, TotalAmount, EtaYear, EtaWeek)
+          VALUES (@purchaseOrderId, @materialId, @quantity, @unit, @unitPrice, @totalAmount, @etaYear, @etaWeek);
+        `);
+      }
+
+      // Recalculate total amount
+      const totalResult = await request.query(`
+        SELECT SUM(TotalAmount) AS total
+        FROM PurchaseOrderLines
+        WHERE PurchaseOrderId = @id;
+      `);
+      const totalAmount = totalResult.recordset[0].total || 0;
+      request.input("totalAmount", sql.Decimal(18, 2), totalAmount);
+      await request.query(`
+        UPDATE PurchaseOrders
+        SET TotalAmount = @totalAmount
+        WHERE PurchaseOrderId = @id;
+      `);
+    }
+
+    await transaction.commit();
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[PurchaseOrders Update Error]", err);
+    try {
+      if (transaction) await transaction.rollback();
+    } catch (_) {}
+    res.status(500).json({ error: "Failed to update purchase order" });
+  }
+});
+
+app.delete("/api/purchase-orders/:id", async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    await pool
+      .request()
+      .input("id", sql.Int, id)
+      .query(`DELETE FROM PurchaseOrders WHERE PurchaseOrderId = @id;`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[PurchaseOrders Delete Error]", err);
+    res.status(500).json({ error: "Failed to delete purchase order" });
   }
 });
 

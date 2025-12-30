@@ -105,22 +105,38 @@ CREATE TABLE ProductionOrders (
 GO
 
 -- Purchase Orders (Phiếu mua hàng)
+-- Drop child table first to avoid foreign key constraint error
+IF OBJECT_ID('PurchaseOrderLines', 'U') IS NOT NULL DROP TABLE PurchaseOrderLines;
+GO
 IF OBJECT_ID('PurchaseOrders', 'U') IS NOT NULL DROP TABLE PurchaseOrders;
+GO
 CREATE TABLE PurchaseOrders (
     PurchaseOrderId INT IDENTITY(1,1) PRIMARY KEY,
+    PONumber NVARCHAR(50) NULL, -- Số PO
+    InvoiceNumber NVARCHAR(50) NULL, -- Số Invoice
+    SupplierName NVARCHAR(200) NULL, -- Tên nhà cung cấp
+    CustomerCode NVARCHAR(50) NULL, -- Mã khách hàng
+    WarehouseCode NVARCHAR(50) NULL, -- Mã kho nhận
+    Currency NVARCHAR(10) DEFAULT 'VND', -- Đơn vị tiền tệ
+    InvoiceDate DATE NULL, -- Ngày khai invoice
+    TotalAmount DECIMAL(18,2) DEFAULT 0, -- Tổng tiền
     Status NVARCHAR(20) NOT NULL DEFAULT 'INITIAL', -- INITIAL, CONFIRM, RECEIVED, CANCELLED
+    CreatedBy NVARCHAR(100) NULL, -- Người thao tác
+    AssignedTo NVARCHAR(100) NULL, -- Người phụ trách
     CreatedAt DATETIME2 DEFAULT SYSDATETIME(),
     UpdatedAt DATETIME2 DEFAULT SYSDATETIME()
 );
 GO
 
 -- Purchase Order Lines (Chi tiết phiếu mua)
-IF OBJECT_ID('PurchaseOrderLines', 'U') IS NOT NULL DROP TABLE PurchaseOrderLines;
 CREATE TABLE PurchaseOrderLines (
     PurchaseOrderLineId INT IDENTITY(1,1) PRIMARY KEY,
     PurchaseOrderId INT NOT NULL,
     MaterialId INT NOT NULL,
     Quantity DECIMAL(18,3) NOT NULL,
+    Unit NVARCHAR(20) DEFAULT 'PCS', -- Đơn vị
+    UnitPrice DECIMAL(18,2) DEFAULT 0, -- Đơn giá
+    TotalAmount DECIMAL(18,2) DEFAULT 0, -- Thành tiền
     EtaYear SMALLINT NOT NULL, -- Expected Time of Arrival
     EtaWeek TINYINT NOT NULL CHECK (EtaWeek >= 1 AND EtaWeek <= 53),
     CreatedAt DATETIME2 DEFAULT SYSDATETIME(),
@@ -190,17 +206,17 @@ INSERT INTO ProductionOrders (ProductId, Quantity, PlanYear, PlanWeek, Status) V
 GO
 
 -- Purchase Orders
-INSERT INTO PurchaseOrders (Status) VALUES
-('CONFIRM'),
-('CONFIRM'),
-('INITIAL'); -- INITIAL không ảnh hưởng MPS
+INSERT INTO PurchaseOrders (PONumber, InvoiceNumber, SupplierName, CustomerCode, WarehouseCode, Currency, InvoiceDate, TotalAmount, Status, CreatedBy, AssignedTo) VALUES
+('PO-2025-001', 'INV-2025-001', N'Công ty ABC', 'CUST001', 'WH001', 'VND', '2025-11-20', 5000000, 'CONFIRM', N'Nguyễn Văn A', N'Trần Thị B'),
+('PO-2025-002', 'INV-2025-002', N'Công ty XYZ', 'CUST002', 'WH001', 'VND', '2025-11-21', 7500000, 'CONFIRM', N'Nguyễn Văn A', N'Lê Văn C'),
+('PO-2025-003', NULL, N'Công ty DEF', 'CUST001', 'WH002', 'VND', NULL, 0, 'INITIAL', N'Nguyễn Văn A', NULL); -- INITIAL không ảnh hưởng MPS
 GO
 
 -- Purchase Order Lines
-INSERT INTO PurchaseOrderLines (PurchaseOrderId, MaterialId, Quantity, EtaYear, EtaWeek) VALUES
-(1, 1, 5, 2025, 49),  -- NVL3: 5 units arriving week 49/2025
-(2, 2, 5, 2025, 49),  -- NVL4: 5 units arriving week 49/2025
-(2, 3, 5, 2025, 49);  -- NVL5: 5 units arriving week 49/2025
+INSERT INTO PurchaseOrderLines (PurchaseOrderId, MaterialId, Quantity, Unit, UnitPrice, TotalAmount, EtaYear, EtaWeek) VALUES
+(1, 1, 5, 'PCS', 1000000, 5000000, 2025, 49),  -- NVL3: 5 units @ 1,000,000 = 5,000,000 arriving week 49/2025
+(2, 2, 5, 'PCS', 1000000, 5000000, 2025, 49),  -- NVL4: 5 units @ 1,000,000 = 5,000,000 arriving week 49/2025
+(2, 3, 5, 'PCS', 500000, 2500000, 2025, 49);  -- NVL5: 5 units @ 500,000 = 2,500,000 arriving week 49/2025
 GO
 
 -- Sales Plans (SHIP_QTY - có thể để trống, user sẽ nhập trong UI)

@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="purchase.detailTitle">Chi tiết Phiếu mua hàng</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="/modules/assets/js/i18n.js"></script>
+    <style>
+        body {
+            background: #f8fafc;
+            padding: 1.5rem;
+        }
+
+        .card {
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+            border: none;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 16px 16px 0 0 !important;
+            padding: 1.25rem 1.5rem;
+            border: none;
+        }
+
+        .card-header h5 {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .badge-status {
+            font-size: 0.75rem;
+            padding: 0.35em 0.65em;
+        }
+
+        .badge-status.INITIAL {
+            background-color: #e5e7eb;
+            color: #111827;
+        }
+
+        .badge-status.CONFIRM {
+            background-color: #2563eb;
+            color: #fff;
+        }
+
+        .badge-status.RECEIVED {
+            background-color: #16a34a;
+            color: #fff;
+        }
+
+        .badge-status.CANCELLED {
+            background-color: #dc2626;
+            color: #fff;
+        }
+
+        .form-label {
+            font-weight: 500;
+            color: #334155;
+            margin-bottom: 0.5rem;
+        }
+
+        .table thead {
+            background: #f1f5f9;
+        }
+
+        .table thead th {
+            border-bottom-width: 1px;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .line-row {
+            transition: background-color 0.15s;
+        }
+
+        .line-row:hover {
+            background-color: #f8fafc;
+        }
+
+        .btn-add-line {
+            border: 2px dashed #cbd5e1;
+            background: #f8fafc;
+            color: #64748b;
+        }
+
+        .btn-add-line:hover {
+            background: #e2e8f0;
+            border-color: #94a3b8;
+        }
+
+        .total-section {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .total-label {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        .total-amount {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #059669;
+        }
+
+        /* Custom searchable dropdown */
+        .material-select-wrapper {
+            position: relative;
+        }
+
+        .material-search-input {
+            width: 100%;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.875rem;
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+        }
+
+        .material-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .material-dropdown.show {
+            display: block;
+        }
+
+        .material-option {
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .material-option:hover {
+            background-color: #f8fafc;
+        }
+
+        .material-option.selected {
+            background-color: #e3f2fd;
+            font-weight: 500;
+        }
+
+        .material-option-code {
+            font-weight: 600;
+            color: #2563eb;
+        }
+
+        .material-option-name {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-left: 0.5rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <a href="/modules/Purchase/index.html" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> <span data-i18n="purchase.backToList">Quay lại danh sách</span>
+            </a>
+        </div>
+        <div>
+            <button id="btnSave" class="btn btn-primary">
+                <i class="bi bi-save"></i> <span data-i18n="purchase.save">Lưu</span>
+            </button>
+            <button id="btnCancel" class="btn btn-outline-secondary">
+                <i class="bi bi-x-lg"></i> <span data-i18n="purchase.cancel">Hủy</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5><i class="bi bi-file-earmark-text"></i> <span data-i18n="purchase.orderInfo">Thông tin Phiếu mua
+                    hàng</span></h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="purchase.form.poNumber">Số PO <span
+                            class="text-danger">*</span></label>
+                    <input type="text" id="poNumber" class="form-control" data-i18n="purchase.form.poNumberPlaceholder"
+                        placeholder="PO-2025-001">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="purchase.form.invoiceNumber">Số Invoice</label>
+                    <input type="text" id="invoiceNumber" class="form-control"
+                        data-i18n="purchase.form.invoiceNumberPlaceholder" placeholder="INV-2025-001">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="purchase.form.supplierName">Tên nhà cung cấp</label>
+                    <input type="text" id="supplierName" class="form-control"
+                        data-i18n="purchase.form.supplierNamePlaceholder" placeholder="Công ty ABC">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="purchase.form.customerCode">Mã khách hàng</label>
+                    <input type="text" id="customerCode" class="form-control"
+                        data-i18n="purchase.form.customerCodePlaceholder" placeholder="CUST001">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="purchase.form.warehouseCode">Mã kho nhận</label>
+                    <input type="text" id="warehouseCode" class="form-control"
+                        data-i18n="purchase.form.warehouseCodePlaceholder" placeholder="WH001">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="purchase.form.currency">Đơn vị tiền tệ</label>
+                    <select id="currency" class="form-select">
+                        <option value="VND">VND</option>
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="purchase.form.invoiceDate">Ngày khai invoice</label>
+                    <input type="date" id="invoiceDate" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="purchase.form.status">Trạng thái <span
+                            class="text-danger">*</span></label>
+                    <select id="status" class="form-select">
+                        <option value="INITIAL" data-i18n="purchase.status.INITIAL">INITIAL</option>
+                        <option value="CONFIRM" data-i18n="purchase.status.CONFIRM">CONFIRM</option>
+                        <option value="RECEIVED" data-i18n="purchase.status.RECEIVED">RECEIVED</option>
+                        <option value="CANCELLED" data-i18n="purchase.status.CANCELLED">CANCELLED</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" data-i18n="purchase.form.createdBy">Người thao tác</label>
+                    <input type="text" id="createdBy" class="form-control"
+                        data-i18n="purchase.form.createdByPlaceholder" placeholder="Nguyễn Văn A">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" data-i18n="purchase.form.assignedTo">Người phụ trách</label>
+                    <input type="text" id="assignedTo" class="form-control"
+                        data-i18n="purchase.form.assignedToPlaceholder" placeholder="Trần Thị B">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5><i class="bi bi-list-ul"></i> <span data-i18n="purchase.materialsList">Danh sách Nguyên vật liệu</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 5%;">#</th>
+                            <th style="width: 15%;" data-i18n="purchase.table.materialCode">Mã NVL</th>
+                            <th style="width: 20%;" data-i18n="purchase.table.materialName">Tên mặt hàng</th>
+                            <th style="width: 10%;" data-i18n="purchase.table.unit">Đơn vị</th>
+                            <th style="width: 12%;" data-i18n="purchase.table.quantity">Số lượng</th>
+                            <th style="width: 12%;" data-i18n="purchase.table.unitPrice">Đơn giá</th>
+                            <th style="width: 12%;" data-i18n="purchase.table.lineTotal">Thành tiền</th>
+                            <th style="width: 8%;" data-i18n="purchase.table.etaYear">Năm ETA</th>
+                            <th style="width: 8%;" data-i18n="purchase.table.etaWeek">Tuần ETA</th>
+                            <th style="width: 5%;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="linesBody">
+                        <!-- Lines will be added here -->
+                    </tbody>
+                </table>
+            </div>
+            <button id="btnAddLine" class="btn btn-add-line w-100 mt-3">
+                <i class="bi bi-plus-circle"></i> <span data-i18n="purchase.addLine">Thêm dòng</span>
+            </button>
+            <div class="total-section">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="total-label" data-i18n="purchase.totalAmount">Tổng tiền:</span>
+                    <span id="totalAmount" class="total-amount">0 VND</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let orderId = null;
+        let order = null;
+        let lines = [];
+        let materials = [];
+
+        // Get order ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        orderId = urlParams.get("id") ? parseInt(urlParams.get("id")) : null;
+
+        // Format number
+        function formatNumber(num) {
+            if (num == null || num === undefined) return "0";
+            return parseFloat(num).toLocaleString("vi-VN", {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 3,
+            });
+        }
+
+        // Format currency
+        function formatCurrency(num, currency = "VND") {
+            if (num == null || num === undefined) return "0";
+            const formatted = parseFloat(num).toLocaleString("vi-VN", {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0,
+            });
+            return `${formatted} ${currency}`;
+        }
+
+        // Fetch JSON helper
+        async function fetchJson(url, options = {}) {
+            try {
+                const res = await fetch(url, options);
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ error: "Request failed" }));
+                    throw new Error(err.error || "Request failed");
+                }
+                return await res.json();
+            } catch (err) {
+                console.error("[Fetch Error]", err);
+                throw err;
+            }
+        }
+
+        // Load materials
+        async function loadMaterials() {
+            try {
+                materials = await fetchJson("/api/items?type=M");
+            } catch (err) {
+                console.error("Failed to load materials:", err);
+                materials = [];
+            }
+        }
+
+        // Load order detail
+        async function loadOrder() {
+            if (!orderId) {
+                // New order
+                order = {
+                    PONumber: "",
+                    InvoiceNumber: "",
+                    SupplierName: "",
+                    CustomerCode: "",
+                    WarehouseCode: "",
+                    Currency: "VND",
+                    InvoiceDate: null,
+                    Status: "INITIAL",
+                    CreatedBy: "",
+                    AssignedTo: "",
+                };
+                lines = [];
+                renderForm();
+                renderLines();
+                return;
+            }
+
+            try {
+                order = await fetchJson(`/api/purchase-orders/${orderId}`);
+                const linesData = await fetchJson(`/api/purchase-orders/${orderId}/lines`);
+                // Map API response fields (PascalCase) to camelCase
+                lines = linesData.map(line => ({
+                    id: line.id,
+                    purchaseOrderId: line.PurchaseOrderId,
+                    materialId: line.MaterialId,
+                    materialCode: line.MaterialCode,
+                    materialName: line.MaterialName,
+                    quantity: line.Quantity,
+                    unit: line.Unit,
+                    unitPrice: line.UnitPrice,
+                    totalAmount: line.TotalAmount,
+                    etaYear: line.EtaYear,
+                    etaWeek: line.EtaWeek,
+                }));
+                renderForm();
+                renderLines();
+            } catch (err) {
+                alert((window.I18n?.t("purchase.loadError") || "Lỗi tải dữ liệu: ") + err.message);
+                window.location.href = "/modules/Purchase/index.html";
+            }
+        }
+
+        // Render form
+        function renderForm() {
+            document.getElementById("poNumber").value = order.PONumber || "";
+            document.getElementById("invoiceNumber").value = order.InvoiceNumber || "";
+            document.getElementById("supplierName").value = order.SupplierName || "";
+            document.getElementById("customerCode").value = order.CustomerCode || "";
+            document.getElementById("warehouseCode").value = order.WarehouseCode || "";
+            document.getElementById("currency").value = order.Currency || "VND";
+            document.getElementById("invoiceDate").value = order.InvoiceDate ? order.InvoiceDate.split("T")[0] : "";
+            document.getElementById("status").value = order.Status || "INITIAL";
+            document.getElementById("createdBy").value = order.CreatedBy || "";
+            document.getElementById("assignedTo").value = order.AssignedTo || "";
+        }
+
+        // Render lines
+        function renderLines() {
+            const body = document.getElementById("linesBody");
+            body.innerHTML = "";
+
+            if (!lines.length) {
+                const tr = document.createElement("tr");
+                const td = document.createElement("td");
+                td.colSpan = 10;
+                td.className = "text-center text-muted py-3";
+                td.textContent = window.I18n?.t("purchase.noLines") || "Chưa có dòng nào. Nhấn 'Thêm dòng' để thêm.";
+                tr.appendChild(td);
+                body.appendChild(tr);
+            } else {
+                lines.forEach((line, idx) => {
+                    const tr = createLineRow(line, idx);
+                    body.appendChild(tr);
+                });
+            }
+
+            updateTotal();
+        }
+
+        // Create line row
+        function createLineRow(line, idx) {
+            const tr = document.createElement("tr");
+            tr.className = "line-row";
+            tr.dataset.index = idx;
+
+            // #
+            const numTd = document.createElement("td");
+            numTd.textContent = idx + 1;
+            tr.appendChild(numTd);
+
+            // Mã NVL - Searchable dropdown
+            const codeTd = document.createElement("td");
+            const wrapper = document.createElement("div");
+            wrapper.className = "material-select-wrapper";
+
+            const searchInput = document.createElement("input");
+            searchInput.type = "text";
+            searchInput.className = "form-control form-control-sm material-search-input";
+            searchInput.placeholder = window.I18n?.t("purchase.searchMaterial") || "Tìm kiếm mã hoặc tên NVL...";
+            searchInput.value = line.materialCode || "";
+
+            const dropdown = document.createElement("div");
+            dropdown.className = "material-dropdown";
+
+            // Filter and render options
+            function renderOptions(searchTerm = "") {
+                dropdown.innerHTML = "";
+                const term = searchTerm.toLowerCase().trim();
+                const filtered = materials.filter(m =>
+                    !term ||
+                    m.code.toLowerCase().includes(term) ||
+                    (m.name && m.name.toLowerCase().includes(term))
+                );
+
+                if (filtered.length === 0) {
+                    const noResult = document.createElement("div");
+                    noResult.className = "material-option";
+                    noResult.textContent = window.I18n?.t("purchase.noMaterialFound") || "Không tìm thấy";
+                    noResult.style.cursor = "default";
+                    dropdown.appendChild(noResult);
+                } else {
+                    filtered.forEach(m => {
+                        const option = document.createElement("div");
+                        option.className = "material-option";
+                        if (line.materialId === m.id) {
+                            option.classList.add("selected");
+                        }
+                        option.innerHTML = `
+                            <span class="material-option-code">${m.code}</span>
+                            <span class="material-option-name">${m.name || ""}</span>
+                        `;
+                        option.addEventListener("click", () => {
+                            line.materialId = m.id;
+                            line.materialCode = m.code;
+                            line.materialName = m.name;
+                            searchInput.value = m.code;
+                            const nameTd = tr.querySelector('[data-field="materialName"]');
+                            if (nameTd) nameTd.textContent = m.name || "-";
+                            dropdown.classList.remove("show");
+                            updateLineTotal(idx);
+                        });
+                        dropdown.appendChild(option);
+                    });
+                }
+            }
+
+            // Initial render
+            renderOptions();
+
+            // Show dropdown on focus/click
+            searchInput.addEventListener("focus", () => {
+                dropdown.classList.add("show");
+                renderOptions(searchInput.value);
+            });
+
+            searchInput.addEventListener("click", () => {
+                dropdown.classList.add("show");
+                renderOptions(searchInput.value);
+            });
+
+            // Search on input
+            searchInput.addEventListener("input", (e) => {
+                const searchValue = e.target.value;
+                // If user clears the input, clear the selection
+                if (!searchValue.trim()) {
+                    line.materialId = null;
+                    line.materialCode = "";
+                    line.materialName = "";
+                    const nameTd = tr.querySelector('[data-field="materialName"]');
+                    if (nameTd) nameTd.textContent = "-";
+                }
+                renderOptions(searchValue);
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener("click", (e) => {
+                if (!wrapper.contains(e.target)) {
+                    dropdown.classList.remove("show");
+                    // If input is empty or doesn't match selected material, clear it
+                    if (!line.materialId || searchInput.value !== line.materialCode) {
+                        if (line.materialId) {
+                            searchInput.value = line.materialCode || "";
+                        } else {
+                            searchInput.value = "";
+                        }
+                    }
+                }
+            });
+
+            wrapper.appendChild(searchInput);
+            wrapper.appendChild(dropdown);
+            codeTd.appendChild(wrapper);
+            tr.appendChild(codeTd);
+
+            // Tên mặt hàng (read-only, updated by material selection)
+            const nameTd = document.createElement("td");
+            nameTd.dataset.field = "materialName";
+            nameTd.textContent = line.materialName || "-";
+            tr.appendChild(nameTd);
+
+            // Đơn vị
+            const unitTd = document.createElement("td");
+            const unitInput = document.createElement("input");
+            unitInput.type = "text";
+            unitInput.className = "form-control form-control-sm";
+            unitInput.dataset.field = "unit";
+            unitInput.value = line.unit || "PCS";
+            unitInput.addEventListener("change", () => {
+                line.unit = unitInput.value;
+            });
+            unitTd.appendChild(unitInput);
+            tr.appendChild(unitTd);
+
+            // Số lượng
+            const qtyTd = document.createElement("td");
+            const qtyInput = document.createElement("input");
+            qtyInput.type = "number";
+            qtyInput.className = "form-control form-control-sm text-end";
+            qtyInput.dataset.field = "quantity";
+            qtyInput.value = line.quantity || 0;
+            qtyInput.step = "0.001";
+            qtyInput.min = "0";
+            qtyInput.addEventListener("change", () => {
+                line.quantity = parseFloat(qtyInput.value) || 0;
+                updateLineTotal(idx);
+            });
+            qtyTd.appendChild(qtyInput);
+            tr.appendChild(qtyTd);
+
+            // Đơn giá
+            const priceTd = document.createElement("td");
+            const priceInput = document.createElement("input");
+            priceInput.type = "number";
+            priceInput.className = "form-control form-control-sm text-end";
+            priceInput.dataset.field = "unitPrice";
+            priceInput.value = line.unitPrice || 0;
+            priceInput.step = "0.01";
+            priceInput.min = "0";
+            priceInput.addEventListener("change", () => {
+                line.unitPrice = parseFloat(priceInput.value) || 0;
+                updateLineTotal(idx);
+            });
+            priceTd.appendChild(priceInput);
+            tr.appendChild(priceTd);
+
+            // Thành tiền
+            const totalTd = document.createElement("td");
+            totalTd.className = "text-end fw-semibold";
+            totalTd.dataset.field = "totalAmount";
+            totalTd.textContent = formatCurrency(line.totalAmount || 0, document.getElementById("currency").value);
+            tr.appendChild(totalTd);
+
+            // Năm ETA
+            const etaYearTd = document.createElement("td");
+            const etaYearInput = document.createElement("input");
+            etaYearInput.type = "number";
+            etaYearInput.className = "form-control form-control-sm";
+            etaYearInput.dataset.field = "etaYear";
+            etaYearInput.value = line.etaYear || new Date().getFullYear();
+            etaYearInput.addEventListener("change", () => {
+                line.etaYear = parseInt(etaYearInput.value) || new Date().getFullYear();
+            });
+            etaYearTd.appendChild(etaYearInput);
+            tr.appendChild(etaYearTd);
+
+            // Tuần ETA
+            const etaWeekTd = document.createElement("td");
+            const etaWeekInput = document.createElement("input");
+            etaWeekInput.type = "number";
+            etaWeekInput.className = "form-control form-control-sm";
+            etaWeekInput.dataset.field = "etaWeek";
+            etaWeekInput.value = line.etaWeek || 1;
+            etaWeekInput.min = "1";
+            etaWeekInput.max = "53";
+            etaWeekInput.addEventListener("change", () => {
+                line.etaWeek = parseInt(etaWeekInput.value) || 1;
+            });
+            etaWeekTd.appendChild(etaWeekInput);
+            tr.appendChild(etaWeekTd);
+
+            // Delete button
+            const deleteTd = document.createElement("td");
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "btn btn-sm btn-outline-danger";
+            deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
+            deleteBtn.onclick = () => {
+                lines.splice(idx, 1);
+                renderLines();
+            };
+            deleteTd.appendChild(deleteBtn);
+            tr.appendChild(deleteTd);
+
+            return tr;
+        }
+
+        // Update line total
+        function updateLineTotal(idx) {
+            const line = lines[idx];
+            if (line) {
+                line.totalAmount = (line.quantity || 0) * (line.unitPrice || 0);
+                const row = document.querySelector(`tr[data-index="${idx}"]`);
+                if (row) {
+                    const totalTd = row.querySelector('[data-field="totalAmount"]');
+                    if (totalTd) {
+                        totalTd.textContent = formatCurrency(line.totalAmount, document.getElementById("currency").value);
+                    }
+                }
+                updateTotal();
+            }
+        }
+
+        // Update total
+        function updateTotal() {
+            const total = lines.reduce((sum, line) => sum + (line.totalAmount || 0), 0);
+            const currency = document.getElementById("currency").value;
+            document.getElementById("totalAmount").textContent = formatCurrency(total, currency);
+        }
+
+        // Add new line
+        document.getElementById("btnAddLine").addEventListener("click", () => {
+            lines.push({
+                materialId: null,
+                materialCode: "",
+                materialName: "",
+                quantity: 0,
+                unit: "PCS",
+                unitPrice: 0,
+                totalAmount: 0,
+                etaYear: new Date().getFullYear(),
+                etaWeek: 1,
+            });
+            renderLines();
+        });
+
+        // Save order
+        document.getElementById("btnSave").addEventListener("click", async () => {
+            const poNumber = document.getElementById("poNumber").value.trim();
+            if (!poNumber) {
+                alert(window.I18n?.t("purchase.validation.poNumberRequired") || "Vui lòng nhập Số PO");
+                return;
+            }
+
+            if (!lines.length) {
+                alert(window.I18n?.t("purchase.validation.atLeastOneLine") || "Vui lòng thêm ít nhất một dòng nguyên vật liệu");
+                return;
+            }
+
+            // Validate lines
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                // Check materialId (can be number or null/undefined)
+                if (!line.materialId || line.materialId === null || line.materialId === undefined || line.materialId === "") {
+                    const msg = (window.I18n?.t("purchase.validation.selectMaterial") || "Dòng {{line}}: Vui lòng chọn Nguyên vật liệu").replace("{{line}}", i + 1);
+                    alert(msg);
+                    return;
+                }
+                // Ensure materialId is a number
+                const materialIdNum = parseInt(line.materialId);
+                if (isNaN(materialIdNum) || materialIdNum <= 0) {
+                    const msg = (window.I18n?.t("purchase.validation.invalidMaterial") || "Dòng {{line}}: Nguyên vật liệu không hợp lệ").replace("{{line}}", i + 1);
+                    alert(msg);
+                    return;
+                }
+                if (!line.quantity || line.quantity <= 0) {
+                    const msg = (window.I18n?.t("purchase.validation.quantityRequired") || "Dòng {{line}}: Vui lòng nhập Số lượng > 0").replace("{{line}}", i + 1);
+                    alert(msg);
+                    return;
+                }
+                if (!line.etaYear || !line.etaWeek) {
+                    const msg = (window.I18n?.t("purchase.validation.etaRequired") || "Dòng {{line}}: Vui lòng nhập Năm và Tuần ETA").replace("{{line}}", i + 1);
+                    alert(msg);
+                    return;
+                }
+            }
+
+            const data = {
+                poNumber: poNumber,
+                invoiceNumber: document.getElementById("invoiceNumber").value.trim() || null,
+                supplierName: document.getElementById("supplierName").value.trim() || null,
+                customerCode: document.getElementById("customerCode").value.trim() || null,
+                warehouseCode: document.getElementById("warehouseCode").value.trim() || null,
+                currency: document.getElementById("currency").value,
+                invoiceDate: document.getElementById("invoiceDate").value || null,
+                status: document.getElementById("status").value,
+                createdBy: document.getElementById("createdBy").value.trim() || null,
+                assignedTo: document.getElementById("assignedTo").value.trim() || null,
+                lines: lines.map(line => ({
+                    materialId: parseInt(line.materialId), // Ensure it's a number
+                    quantity: parseFloat(line.quantity) || 0,
+                    unit: line.unit || "PCS",
+                    unitPrice: parseFloat(line.unitPrice) || 0,
+                    totalAmount: parseFloat(line.totalAmount) || 0,
+                    etaYear: parseInt(line.etaYear) || new Date().getFullYear(),
+                    etaWeek: parseInt(line.etaWeek) || 1,
+                })),
+            };
+
+            try {
+                if (orderId) {
+                    // Update
+                    await fetchJson(`/api/purchase-orders/${orderId}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(data),
+                    });
+                    alert(window.I18n?.t("purchase.updateSuccess") || "Cập nhật thành công!");
+                } else {
+                    // Create
+                    const result = await fetchJson("/api/purchase-orders", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(data),
+                    });
+                    alert(window.I18n?.t("purchase.createSuccess") || "Tạo thành công!");
+                    window.location.href = `/modules/Purchase/detail.html?id=${result.id}`;
+                    return;
+                }
+                loadOrder();
+            } catch (err) {
+                alert((window.I18n?.t("purchase.saveFailed") || "Lưu thất bại: ") + err.message);
+            }
+        });
+
+        // Cancel
+        document.getElementById("btnCancel").addEventListener("click", () => {
+            const confirmMsg = window.I18n?.t("purchase.confirmCancel") || "Bạn có chắc muốn hủy? Các thay đổi chưa lưu sẽ bị mất.";
+            if (confirm(confirmMsg)) {
+                window.location.href = "/modules/Purchase/index.html";
+            }
+        });
+
+        // Currency change updates totals
+        document.getElementById("currency").addEventListener("change", () => {
+            renderLines();
+        });
+
+        // Initialize
+        loadMaterials().then(() => {
+            loadOrder();
+        });
+    </script>
+</body>
+
+</html>
