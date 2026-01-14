@@ -16,13 +16,13 @@ const config = {
     trustServerCertificate: process.env.SQL_ENCRYPT !== "true",
     // Enable instance name resolution for named instances
     enableArithAbort: true,
-    instanceName: hasInstance ? sqlServer.split(/[\\\/]/)[1] : undefined
+    instanceName: hasInstance ? sqlServer.split(/[\\\/]/)[1] : undefined,
   },
   pool: {
     max: 10,
     min: 0,
-    idleTimeoutMillis: 30000
-  }
+    idleTimeoutMillis: 30000,
+  },
 };
 
 let poolPromise;
@@ -46,10 +46,5 @@ async function getPool() {
 
 module.exports = {
   sql,
-  getPool
+  getPool,
 };
-
-
-
-
-

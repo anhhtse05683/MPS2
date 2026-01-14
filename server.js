@@ -420,17 +420,14 @@ app.delete("/api/items/:type/:id", async (req, res) => {
 });
 
 // Bulk import items from Excel
-app.post(
-  "/api/items/import",
-  upload.single("file"),
-  async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "file is required" });
-    try {
-      const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const rows = xlsx.utils.sheet_to_json(sheet, { defval: null });
-      const pool = await getPool();
+app.post("/api/items/import", upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "file is required" });
+  try {
+    const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = xlsx.utils.sheet_to_json(sheet, { defval: null });
+    const pool = await getPool();
 
     for (const row of rows) {
       const itemType = (row.Type || row.ItemType || "").toUpperCase();
@@ -701,10 +698,7 @@ app.get("/api/purchase-orders/:id", async (req, res) => {
   if (!id) return res.status(400).json({ error: "Invalid id" });
   try {
     const pool = await getPool();
-    const result = await pool
-      .request()
-      .input("id", sql.Int, id)
-      .query(`
+    const result = await pool.request().input("id", sql.Int, id).query(`
         SELECT po.PurchaseOrderId AS id,
                po.PONumber,
                po.InvoiceNumber,
@@ -736,10 +730,7 @@ app.get("/api/purchase-orders/:id/lines", async (req, res) => {
   if (!id) return res.status(400).json({ error: "Invalid id" });
   try {
     const pool = await getPool();
-    const result = await pool
-      .request()
-      .input("id", sql.Int, id)
-      .query(`
+    const result = await pool.request().input("id", sql.Int, id).query(`
         SELECT pol.PurchaseOrderLineId AS id,
                pol.PurchaseOrderId,
                pol.MaterialId,
@@ -781,7 +772,9 @@ app.post("/api/purchase-orders", async (req, res) => {
   if (!["INITIAL", "CONFIRM", "RECEIVED", "CANCELLED"].includes(normStatus))
     return res
       .status(400)
-      .json({ error: "status must be INITIAL, CONFIRM, RECEIVED or CANCELLED" });
+      .json({
+        error: "status must be INITIAL, CONFIRM, RECEIVED or CANCELLED",
+      });
   if (!Array.isArray(lines) || !lines.length)
     return res.status(400).json({ error: "lines array is required" });
 
@@ -865,10 +858,15 @@ app.put("/api/purchase-orders/:id", async (req, res) => {
     lines,
   } = req.body || {};
   const normStatus = status ? status.toUpperCase() : null;
-  if (normStatus && !["INITIAL", "CONFIRM", "RECEIVED", "CANCELLED"].includes(normStatus))
+  if (
+    normStatus &&
+    !["INITIAL", "CONFIRM", "RECEIVED", "CANCELLED"].includes(normStatus)
+  )
     return res
       .status(400)
-      .json({ error: "status must be INITIAL, CONFIRM, RECEIVED or CANCELLED" });
+      .json({
+        error: "status must be INITIAL, CONFIRM, RECEIVED or CANCELLED",
+      });
 
   let transaction;
   try {

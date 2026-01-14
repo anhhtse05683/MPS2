@@ -91,8 +91,13 @@
                     <i class="bi bi-people"></i>
                     <span data-i18n="erp.customerManagement">Quản lý khách hàng</span>
                 </a>
-                <a href="#orders" class="menu-item">
+                <!-- <a href="#orders" class="menu-item" data-src="/modules/MPS/po.html">
                     <i class="bi bi-receipt"></i>
+                    <span data-i18n="erp.orders">Đơn hàng</span>
+                    <span class="badge">12</span>
+                </a> -->
+                <a href="#mps" class="menu-item" data-src="/modules/MPS/po.html">
+                    <i class="bi bi-diagram-3"></i>
                     <span data-i18n="erp.orders">Đơn hàng</span>
                     <span class="badge">12</span>
                 </a>
@@ -464,13 +469,26 @@
         });
 
         // Function to load module/page in iframe (shared function)
-        function loadModule(src) {
+        function loadModule(src, opts = { pushState: true }) {
             const dashboard = document.getElementById('dashboardContent');
             const moduleContainer = document.getElementById('moduleContainer');
             const frame = document.getElementById('moduleFrame');
             if (dashboard) dashboard.style.display = 'none';
             if (moduleContainer) moduleContainer.style.display = 'block';
             if (frame) frame.src = src;
+
+            // Persist current module in URL so F5 can restore it
+            if (opts && opts.pushState) {
+                const hash = `module=${encodeURIComponent(src)}`;
+                if (location.hash !== `#${hash}`) location.hash = hash;
+            }
+        }
+
+        function setActiveMenuBySrc(src) {
+            const menuItems = document.querySelectorAll('.menu-item');
+            menuItems.forEach(i => i.classList.remove('active'));
+            const match = document.querySelector(`.menu-item[data-src="${CSS.escape(src)}"]`);
+            if (match) match.classList.add('active');
         }
 
         // Menu item active state & module loading
@@ -485,7 +503,7 @@
                     e.preventDefault();
                     menuItems.forEach(i => i.classList.remove('active'));
                     item.classList.add('active');
-                    loadModule(src);
+                    loadModule(src, { pushState: true });
                     return;
                 }
 
@@ -507,6 +525,38 @@
                 menuItems.forEach(i => i.classList.remove('active'));
                 item.classList.add('active');
             });
+        });
+
+        function restoreModuleFromHash() {
+            const hash = (location.hash || '').replace(/^#/, '');
+            if (!hash) return false;
+            const params = new URLSearchParams(hash);
+            const src = params.get('module');
+            if (src) {
+                loadModule(src, { pushState: false });
+                setActiveMenuBySrc(src);
+                return true;
+            }
+            return false;
+        }
+
+        // Restore module on first load (F5)
+        restoreModuleFromHash();
+
+        // Restore module when navigating browser history/back/forward
+        window.addEventListener('hashchange', () => {
+            // If hash cleared -> back to dashboard
+            if (!location.hash || location.hash === '#') {
+                const dashboard = document.getElementById('dashboardContent');
+                const moduleContainer = document.getElementById('moduleContainer');
+                if (moduleContainer) moduleContainer.style.display = 'none';
+                if (dashboard) dashboard.style.display = 'block';
+                menuItems.forEach(i => i.classList.remove('active'));
+                const first = document.querySelector('.menu-item.active') || document.querySelector('.menu-item');
+                if (first) first.classList.add('active');
+                return;
+            }
+            restoreModuleFromHash();
         });
 
         // Module cards click (placeholder)
