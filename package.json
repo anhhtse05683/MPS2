@@ -15,6 +15,7 @@
     "express": "^4.19.2",
     "mssql": "^12.2.0",
     "multer": "^2.0.2",
+    "socket.io": "^4.8.3",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

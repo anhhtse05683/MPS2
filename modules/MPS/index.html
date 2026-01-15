@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="/modules/MPS/assets/css/mps.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="/modules/assets/js/i18n.js"></script>
+    <!-- Realtime updates -->
+    <script src="/socket.io/socket.io.js"></script>
 
 </head>
 
@@ -140,6 +142,8 @@
         };
         let pendingShipChanges = {};
         let saveShipTimer = null;
+        let mpsSocket = null;
+        let realtimeReloadTimer = null;
 
         // ------------------ Helpers ------------------
         const weekKey = (week, year) => `${year}-W${String(week).padStart(2, "0")}`;
@@ -524,6 +528,55 @@
             updateOpeningInputs();
         }
 
+        // ------------------ Realtime helpers (Socket.IO) ------------------
+        function scheduleRealtimeReload() {
+            if (realtimeReloadTimer) clearTimeout(realtimeReloadTimer);
+            // Debounce để gộp nhiều update gần nhau
+            realtimeReloadTimer = setTimeout(() => {
+                console.log("[MPS] Realtime reload triggered");
+                loadDataAndRender().catch(err => {
+                    console.error("[MPS] Realtime reload failed", err);
+                });
+            }, 500);
+        }
+
+        function initRealtimeSocket() {
+            if (typeof io === "undefined") {
+                console.warn("[MPS] Socket.IO client not found");
+                return;
+            }
+            if (mpsSocket) return; // already connected
+
+            mpsSocket = io();
+            console.log("[MPS] Socket connected, id=", mpsSocket.id);
+
+            mpsSocket.on("connect", () => {
+                console.log("[MPS] Socket connected");
+            });
+            mpsSocket.on("disconnect", () => {
+                console.log("[MPS] Socket disconnected");
+            });
+
+            // Khi Production thay đổi (đơn sản xuất), MPS cần cập nhật lại
+            mpsSocket.on("production:changed", (payload) => {
+                try {
+                    const currentProductId = Number(document.getElementById("productSelect").value);
+                    if (payload && payload.productId && payload.productId !== currentProductId) {
+                        // Không phải sản phẩm đang xem -> bỏ qua
+                        return;
+                    }
+                } catch (_) {
+                    // Nếu chưa có productSelect thì cứ reload
+                }
+                scheduleRealtimeReload();
+            });
+
+            // Khi Purchase thay đổi (PO CONFIRM ảnh hưởng stock_in), MPS cũng cần cập nhật
+            mpsSocket.on("purchase:changed", () => {
+                scheduleRealtimeReload();
+            });
+        }
+
         // ------------------ Render orchestrator ------------------
         function renderAll() {
             const startWeek = Number(document.getElementById("startWeek").value);
@@ -574,8 +627,12 @@
         async function init() {
             await loadProducts();
             document.getElementById("applyView").addEventListener("click", onApplyView);
-            document.getElementById("productSelect").addEventListener("change", loadDataAndRender);
+            document.getElementById("productSelect").addEventListener("change", () => {
+                // Khi đổi sản phẩm, load lại dữ liệu; socket listener vẫn giữ nguyên
+                loadDataAndRender();
+            });
             initScrollSync();
+            initRealtimeSocket();
             await loadDataAndRender();
         }
 

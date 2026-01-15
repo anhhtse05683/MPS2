@@ -4,9 +4,24 @@ const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const xlsx = require("xlsx");
+const http = require("http");
+const { Server } = require("socket.io");
 const { getPool, sql } = require("./src/db");
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+  },
+});
+
+io.on("connection", (socket) => {
+  console.log("[Socket] client connected:", socket.id);
+  socket.on("disconnect", () => {
+    console.log("[Socket] client disconnected:", socket.id);
+  });
+});
 
 // Limits for Excel import to reduce DoS surface
 const MAX_IMPORT_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
@@ -581,7 +596,23 @@ app.post("/api/production-orders", async (req, res) => {
         OUTPUT INSERTED.ProductionOrderId AS id
         VALUES (@productId, @quantity, @planYear, @planWeek, @status);
       `);
-    res.status(201).json({ id: result.recordset[0].id });
+    const newId = result.recordset[0].id;
+
+    // Notify realtime clients (e.g. MPS) that production changed
+    try {
+      io.emit("production:changed", {
+        type: "create",
+        id: newId,
+        productId,
+        year: planYear,
+        week: planWeek,
+        status: normStatus,
+      });
+    } catch (notifyErr) {
+      console.error("[Socket] Failed to emit production:changed (create)", notifyErr);
+    }
+
+    res.status(201).json({ id: newId });
   } catch (err) {
     console.error("[ProductionOrders Create Error]", err);
     res.status(500).json({ error: "Failed to create production order" });
@@ -618,6 +649,19 @@ app.put("/api/production-orders/:id", async (req, res) => {
           UpdatedAt = SYSDATETIME()
       WHERE ProductionOrderId = @id;
     `);
+    try {
+      io.emit("production:changed", {
+        type: "update",
+        id,
+        productId: productId || null,
+        year: planYear || null,
+        week: planWeek || null,
+        status: normStatus || null,
+      });
+    } catch (notifyErr) {
+      console.error("[Socket] Failed to emit production:changed (update)", notifyErr);
+    }
+
     res.json({ ok: true });
   } catch (err) {
     console.error("[ProductionOrders Update Error]", err);
@@ -634,6 +678,15 @@ app.delete("/api/production-orders/:id", async (req, res) => {
       .request()
       .input("id", sql.Int, id)
       .query(`DELETE FROM ProductionOrders WHERE ProductionOrderId = @id;`);
+    try {
+      io.emit("production:changed", {
+        type: "delete",
+        id,
+      });
+    } catch (notifyErr) {
+      console.error("[Socket] Failed to emit production:changed (delete)", notifyErr);
+    }
+
     res.json({ ok: true });
   } catch (err) {
     console.error("[ProductionOrders Delete Error]", err);
@@ -831,6 +884,17 @@ app.post("/api/purchase-orders", async (req, res) => {
     }
 
     await transaction.commit();
+
+    try {
+      io.emit("purchase:changed", {
+        type: "create",
+        id: poId,
+        status: normStatus,
+      });
+    } catch (notifyErr) {
+      console.error("[Socket] Failed to emit purchase:changed (create)", notifyErr);
+    }
+
     res.status(201).json({ id: poId });
   } catch (err) {
     console.error("[PurchaseOrders Create Error]", err);
@@ -968,6 +1032,17 @@ app.put("/api/purchase-orders/:id", async (req, res) => {
     }
 
     await transaction.commit();
+
+    try {
+      io.emit("purchase:changed", {
+        type: "update",
+        id,
+        status: normStatus || null,
+      });
+    } catch (notifyErr) {
+      console.error("[Socket] Failed to emit purchase:changed (update)", notifyErr);
+    }
+
     res.json({ ok: true });
   } catch (err) {
     console.error("[PurchaseOrders Update Error]", err);
@@ -987,6 +1062,15 @@ app.delete("/api/purchase-orders/:id", async (req, res) => {
       .request()
       .input("id", sql.Int, id)
       .query(`DELETE FROM PurchaseOrders WHERE PurchaseOrderId = @id;`);
+    try {
+      io.emit("purchase:changed", {
+        type: "delete",
+        id,
+      });
+    } catch (notifyErr) {
+      console.error("[Socket] Failed to emit purchase:changed (delete)", notifyErr);
+    }
+
     res.json({ ok: true });
   } catch (err) {
     console.error("[PurchaseOrders Delete Error]", err);
@@ -1078,6 +1162,6 @@ app.get("*", (req, res) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
