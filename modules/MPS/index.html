@@ -34,19 +34,19 @@
                     <div class="row g-3 align-items-end">
                         <div class="col-6 col-md-2">
                             <label class="form-label" data-i18n="mps.fromWeek">Từ tuần</label>
-                            <input id="startWeek" type="number" min="1" max="52" class="form-control" value="47">
+                            <input id="startWeek" type="number" min="1" max="52" class="form-control">
                         </div>
                         <div class="col-6 col-md-2">
                             <label class="form-label" data-i18n="mps.year">Năm</label>
-                            <input id="startYear" type="number" class="form-control" value="2025">
+                            <input id="startYear" type="number" class="form-control">
                         </div>
                         <div class="col-6 col-md-2">
                             <label class="form-label" data-i18n="mps.toWeek">Đến tuần</label>
-                            <input id="endWeek" type="number" min="1" max="52" class="form-control" value="52">
+                            <input id="endWeek" type="number" min="1" max="52" class="form-control">
                         </div>
                         <div class="col-6 col-md-2">
                             <label class="form-label" data-i18n="mps.year">Năm</label>
-                            <input id="endYear" type="number" class="form-control" value="2025">
+                            <input id="endYear" type="number" class="form-control">
                         </div>
                         <div class="col-12 col-md-4">
                             <label class="form-label" data-i18n="mps.selectProduct">Chọn sản phẩm</label>
@@ -64,12 +64,11 @@
                             <div>
                                 <label class="form-label mb-0 small" data-i18n="mps.week">Tuần</label>
                                 <input id="productOpeningWeek" type="number" min="1" max="52"
-                                    class="form-control form-control-sm" value="47">
+                                    class="form-control form-control-sm">
                             </div>
                             <div>
                                 <label class="form-label mb-0 small" data-i18n="mps.year">Năm</label>
-                                <input id="productOpeningYear" type="number" class="form-control form-control-sm"
-                                    value="2025">
+                                <input id="productOpeningYear" type="number" class="form-control form-control-sm">
                             </div>
                         </div>
                         <button id="applyView" class="btn btn-primary" data-i18n="mps.viewSchedule">Xem lịch</button>
@@ -148,6 +147,50 @@
         // ------------------ Helpers ------------------
         const weekKey = (week, year) => `${year}-W${String(week).padStart(2, "0")}`;
 
+        // Tính tuần hiện tại trong năm (tính từ 1/1, tuần bắt đầu từ thứ 2)
+        function getCurrentWeek() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const startOfYear = new Date(year, 0, 1); // 1/1 của năm hiện tại
+            const dayOfYear = Math.floor((now - startOfYear) / (24 * 60 * 60 * 1000)) + 1; // Số ngày từ đầu năm (1-based)
+            const dayOfWeek = startOfYear.getDay(); // 0 = Chủ nhật, 1 = Thứ 2, ...
+            // Điều chỉnh để tuần bắt đầu từ thứ 2 (Monday = 1)
+            const adjustedDayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek; // Chủ nhật = 7
+            const weekNumber = Math.ceil((dayOfYear + (7 - adjustedDayOfWeek)) / 7);
+            // Đảm bảo tuần trong khoảng 1-52
+            return Math.min(Math.max(weekNumber, 1), 52);
+        }
+
+        // Tính toán giá trị mặc định cho fromWeek, toWeek, year
+        function calculateDefaultWeekRange() {
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentWeek = getCurrentWeek();
+
+            // fromWeek = tuần hiện tại - 4
+            let fromWeek = currentWeek - 4;
+            let fromYear = currentYear;
+            if (fromWeek < 1) {
+                fromWeek = 52 + fromWeek; // Lùi về năm trước
+                fromYear = currentYear - 1;
+            }
+
+            // toWeek = tuần hiện tại + 6
+            let toWeek = currentWeek + 6;
+            let toYear = currentYear;
+            if (toWeek > 52) {
+                toWeek = toWeek - 52; // Sang năm sau
+                toYear = currentYear + 1;
+            }
+
+            return {
+                fromWeek: Math.max(1, Math.min(fromWeek, 52)),
+                fromYear,
+                toWeek: Math.max(1, Math.min(toWeek, 52)),
+                toYear
+            };
+        }
+
         async function fetchJson(url, options = {}) {
             const res = await fetch(API_BASE + url, {
                 headers: { "Content-Type": "application/json" },
@@ -215,71 +258,111 @@
         // ------------------ Calculations ------------------
         function calculateProductRows(productId, weeks, userShip, productionMap) {
             const opening = state.productOpening;
+            if (!weeks.length) return { ship: [], pro: [], balance: [] };
+
+            const lastWeek = weeks[weeks.length - 1];
+            const firstWeek = weeks[0];
+
+            // Xác định điểm bắt đầu tính chuỗi balance
+            let calcStartWeek = firstWeek.week;
+            let calcStartYear = firstWeek.year;
+            if (opening && (opening.year < firstWeek.year || (opening.year === firstWeek.year && opening.week <= firstWeek.week))) {
+                calcStartWeek = opening.week;
+                calcStartYear = opening.year;
+            } else if (firstWeek.week > 1) {
+                calcStartWeek = firstWeek.week - 1;
+                calcStartYear = firstWeek.year;
+            } else {
+                calcStartWeek = 52;
+                calcStartYear = firstWeek.year - 1;
+            }
+
+            const allWeeks = generateWeeks(calcStartYear, calcStartWeek, lastWeek.year, lastWeek.week);
+            const balanceMap = {};
             let prevBalance = 0;
-            let openingApplied = false;
-            const rows = { ship: [], pro: [], balance: [] };
 
-            weeks.forEach(({ week, year }) => {
-                const shipQty = Number(userShip[weekKey(week, year)] || 0);
-                const proQty = Number(productionMap[weekKey(week, year)] || 0);
-                const isAfterOpening = opening && (year > opening.year || (year === opening.year && week > opening.week));
+            allWeeks.forEach(w => {
+                const key = weekKey(w.week, w.year);
+                const shipQty = Number(userShip[key] || 0);
+                const proQty = Number(productionMap[key] || 0);
 
-                if (isSameWeek(week, year, opening)) {
+                if (opening && isSameWeek(w.week, w.year, opening)) {
                     prevBalance = opening.balance;
-                    openingApplied = true;
-                    rows.balance.push(opening.balance);
-                } else if (isAfterOpening || (opening && openingApplied)) {
-                    if (opening && !openingApplied) {
-                        prevBalance = opening.balance;
-                        openingApplied = true;
-                    }
-                    const currentBalance = prevBalance - shipQty + proQty;
-                    rows.balance.push(currentBalance);
-                    prevBalance = currentBalance;
+                } else if (opening && (w.year < opening.year || (w.year === opening.year && w.week < opening.week))) {
+                    prevBalance = 0; // trước opening => 0
                 } else {
-                    rows.balance.push(0);
-                    prevBalance = 0;
+                    prevBalance = prevBalance - shipQty + proQty;
                 }
-                rows.ship.push(shipQty);
-                rows.pro.push(proQty);
+                balanceMap[key] = prevBalance;
+            });
+
+            const rows = { ship: [], pro: [], balance: [] };
+            weeks.forEach(({ week, year }) => {
+                const key = weekKey(week, year);
+                rows.ship.push(Number(userShip[key] || 0));
+                rows.pro.push(Number(productionMap[key] || 0));
+                rows.balance.push(balanceMap[key] ?? 0);
             });
 
             return rows;
         }
 
         function calculateMaterialRows(productId, weeks, productionMap) {
+            if (!weeks.length) return [];
+            const lastWeek = weeks[weeks.length - 1];
+            const firstWeek = weeks[0];
+
             return state.materials.map(mat => {
                 const opening = state.materialOpenings[mat.id] || null;
+
+                // Xác định điểm bắt đầu tính chuỗi balance
+                let calcStartWeek = firstWeek.week;
+                let calcStartYear = firstWeek.year;
+                if (opening && (opening.year < firstWeek.year || (opening.year === firstWeek.year && opening.week <= firstWeek.week))) {
+                    calcStartWeek = opening.week;
+                    calcStartYear = opening.year;
+                } else if (firstWeek.week > 1) {
+                    calcStartWeek = firstWeek.week - 1;
+                    calcStartYear = firstWeek.year;
+                } else {
+                    calcStartWeek = 52;
+                    calcStartYear = firstWeek.year - 1;
+                }
+
+                const allWeeks = generateWeeks(calcStartYear, calcStartWeek, lastWeek.year, lastWeek.week);
+                const balanceMap = {};
+                const stockInMap = {};
+                const stockOutMap = {};
                 let prevBalance = 0;
-                let openingApplied = false;
+
+                allWeeks.forEach(w => {
+                    const key = weekKey(w.week, w.year);
+                    const proQty = Number(productionMap[key] || 0);
+                    const outQty = proQty * mat.consume;
+                    const inQty = Number((state.purchase[mat.id] && state.purchase[mat.id][key]) || 0);
+
+                    stockInMap[key] = inQty;
+                    stockOutMap[key] = outQty;
+
+                    if (opening && isSameWeek(w.week, w.year, opening)) {
+                        prevBalance = opening.balance;
+                    } else if (opening && (w.year < opening.year || (w.year === opening.year && w.week < opening.week))) {
+                        prevBalance = 0;
+                    } else {
+                        prevBalance = prevBalance - outQty + inQty;
+                    }
+                    balanceMap[key] = prevBalance;
+                });
+
                 const stockIn = [];
                 const stockOut = [];
                 const balance = [];
 
                 weeks.forEach(({ week, year }) => {
-                    const proQty = Number(productionMap[weekKey(week, year)] || 0);
-                    const outQty = proQty * mat.consume;
-                    const inQty = Number((state.purchase[mat.id] && state.purchase[mat.id][weekKey(week, year)]) || 0);
-                    const isAfterOpening = opening && (year > opening.year || (year === opening.year && week > opening.week));
-
-                    if (isSameWeek(week, year, opening)) {
-                        prevBalance = opening.balance;
-                        openingApplied = true;
-                        balance.push(opening.balance);
-                    } else if (isAfterOpening || (opening && openingApplied)) {
-                        if (opening && !openingApplied) {
-                            prevBalance = opening.balance;
-                            openingApplied = true;
-                        }
-                        const cur = prevBalance - outQty + inQty;
-                        balance.push(cur);
-                        prevBalance = cur;
-                    } else {
-                        balance.push(0);
-                        prevBalance = 0;
-                    }
-                    stockIn.push(inQty);
-                    stockOut.push(outQty);
+                    const key = weekKey(week, year);
+                    stockIn.push(stockInMap[key] ?? 0);
+                    stockOut.push(stockOutMap[key] ?? 0);
+                    balance.push(balanceMap[key] ?? 0);
                 });
 
                 return { material: mat, stockIn, stockOut, balance };
@@ -496,12 +579,29 @@
             const endWeek = Number(document.getElementById("endWeek").value);
             const endYear = Number(document.getElementById("endYear").value);
 
-            // materials + product opening + sales plan + production in parallel
-            const [materials, productOpening, salesPlans, production] = await Promise.all([
+            // Cần biết opening của sản phẩm trước để quyết định range load dữ liệu
+            const productOpening = await fetchJson(`/api/opening-balance/product/${productId}`);
+
+            // Load từ tuần opening (nếu có) để đủ dữ liệu tính balance xuyên nhiều tuần
+            // Nếu không có opening: lùi 1 tuần trước range để giảm thiếu hụt
+            let loadFromWeek;
+            let loadFromYear;
+            if (productOpening) {
+                loadFromWeek = productOpening.week;
+                loadFromYear = productOpening.year;
+            } else if (startWeek > 1) {
+                loadFromWeek = startWeek - 1;
+                loadFromYear = startYear;
+            } else {
+                loadFromWeek = 52;
+                loadFromYear = startYear - 1;
+            }
+
+            // materials + sales plan + production in parallel
+            const [materials, salesPlans, production] = await Promise.all([
                 fetchJson(`/api/materials?productId=${productId}`),
-                fetchJson(`/api/opening-balance/product/${productId}`),
-                fetchJson(`/api/sales-plan?productId=${productId}&fromYear=${startYear}&fromWeek=${startWeek}&toYear=${endYear}&toWeek=${endWeek}`),
-                fetchJson(`/api/production?productId=${productId}&fromYear=${startYear}&fromWeek=${startWeek}&toYear=${endYear}&toWeek=${endWeek}`)
+                fetchJson(`/api/sales-plan?productId=${productId}&fromYear=${loadFromYear}&fromWeek=${loadFromWeek}&toYear=${endYear}&toWeek=${endWeek}`),
+                fetchJson(`/api/production?productId=${productId}&fromYear=${loadFromYear}&fromWeek=${loadFromWeek}&toYear=${endYear}&toWeek=${endWeek}`)
             ]);
 
             state.materials = materials;
@@ -522,7 +622,8 @@
             state.materialOpenings = openings;
 
             // purchase for range (all materials) then filter
-            const purchase = await fetchJson(`/api/purchase?fromYear=${startYear}&fromWeek=${startWeek}&toYear=${endYear}&toWeek=${endWeek}`);
+            // Load thêm 1 tuần trước range để có đủ dữ liệu tính balance
+            const purchase = await fetchJson(`/api/purchase?fromYear=${loadFromYear}&fromWeek=${loadFromWeek}&toYear=${endYear}&toWeek=${endWeek}`);
             state.purchase = mapPurchase(purchase || []);
 
             updateOpeningInputs();
@@ -625,6 +726,26 @@
         }
 
         async function init() {
+            // Set giá trị mặc định cho tuần/năm dựa trên tuần hiện tại
+            const defaultRange = calculateDefaultWeekRange();
+            document.getElementById("startWeek").value = defaultRange.fromWeek;
+            document.getElementById("startYear").value = defaultRange.fromYear;
+            document.getElementById("endWeek").value = defaultRange.toWeek;
+            document.getElementById("endYear").value = defaultRange.toYear;
+
+            // Set giá trị mặc định cho opening balance (tuần hiện tại - 4, năm hiện tại)
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentWeek = getCurrentWeek();
+            let openingWeek = currentWeek - 4;
+            let openingYear = currentYear;
+            if (openingWeek < 1) {
+                openingWeek = 52 + openingWeek;
+                openingYear = currentYear - 1;
+            }
+            document.getElementById("productOpeningWeek").value = Math.max(1, Math.min(openingWeek, 52));
+            document.getElementById("productOpeningYear").value = openingYear;
+
             await loadProducts();
             document.getElementById("applyView").addEventListener("click", onApplyView);
             document.getElementById("productSelect").addEventListener("change", () => {
