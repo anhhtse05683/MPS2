@@ -72,6 +72,18 @@ body {
 #productHeader .text-center {
   background-color: #c9b6ff;
 }
+#materialHeader .text-center {
+  background-color: #c9b6ff;
+}
+/* Đảm bảo cột đầu tiên (Product/Material) có cùng độ rộng */
+#productHeader th:first-child,
+#materialHeader th:first-child,
+#productBody td:first-child,
+#materialBody td:first-child {
+  width: 200px;
+  min-width: 200px;
+  max-width: 200px;
+}
 .text-center {
   width: 40px;
 }
