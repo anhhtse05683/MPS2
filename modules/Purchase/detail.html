@@ -11,7 +11,7 @@
     <style>
         body {
             background: #f8fafc;
-            padding: 1.5rem;
+            padding: 1rem;
         }
 
         .card {
@@ -134,16 +134,37 @@
             background: white;
             border: 1px solid #ced4da;
             border-radius: 0.25rem;
-            max-height: 200px;
+            max-height: 220px;
             overflow-y: auto;
-            z-index: 1000;
+            z-index: 99999;
             display: none;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
+        /* Khi show: dùng fixed để thoát khỏi overflow của card-body */
         .material-dropdown.show {
             display: block;
+            position: fixed;
         }
+
+        /* Đảm bảo vùng Materials List có đủ không gian cho dropdown */
+        .materials-table-wrapper {
+            min-height: 180px;
+            padding-bottom: 1rem;
+        }
+
+        /* Mở rộng bảng Materials List - giảm giới hạn hẹp */
+        .materials-table-wrapper .table-responsive {
+            min-width: 1100px;
+            width: 100%;
+        }
+
+        .materials-card .card-body {
+            padding-left: 1rem;
+            padding-right: 1rem;
+            overflow-x: auto;
+        }
+
 
         .material-option {
             padding: 0.5rem 0.75rem;
@@ -259,12 +280,13 @@
         </div>
     </div>
 
-    <div class="card">
+    <div class="card materials-card">
         <div class="card-header">
             <h5><i class="bi bi-list-ul"></i> <span data-i18n="purchase.materialsList">Danh sách Nguyên vật liệu</span>
             </h5>
         </div>
         <div class="card-body">
+            <div class="materials-table-wrapper">
             <div class="table-responsive">
                 <table class="table table-bordered align-middle mb-0">
                     <thead>
@@ -285,6 +307,7 @@
                         <!-- Lines will be added here -->
                     </tbody>
                 </table>
+            </div>
             </div>
             <button id="btnAddLine" class="btn btn-add-line w-100 mt-3">
                 <i class="bi bi-plus-circle"></i> <span data-i18n="purchase.addLine">Thêm dòng</span>
@@ -506,16 +529,30 @@
             // Initial render
             renderOptions();
 
-            // Show dropdown on focus/click
-            searchInput.addEventListener("focus", () => {
-                dropdown.classList.add("show");
-                renderOptions(searchInput.value);
-            });
+            // Định vị dropdown theo viewport (fixed) để thoát overflow của card-body
+            function positionDropdown() {
+                if (!dropdown.classList.contains("show")) return;
+                const rect = searchInput.getBoundingClientRect();
+                dropdown.style.top = rect.bottom + "px";
+                dropdown.style.left = rect.left + "px";
+                dropdown.style.width = rect.width + "px";
+                dropdown.style.right = "auto";
+            }
 
-            searchInput.addEventListener("click", () => {
+            // Show dropdown on focus/click
+            function showDropdown() {
                 dropdown.classList.add("show");
                 renderOptions(searchInput.value);
-            });
+                requestAnimationFrame(positionDropdown);
+            }
+
+            searchInput.addEventListener("focus", showDropdown);
+            searchInput.addEventListener("click", showDropdown);
+
+            // Cập nhật vị trí khi scroll
+            window.addEventListener("scroll", () => {
+                if (dropdown.classList.contains("show")) positionDropdown();
+            }, true);
 
             // Search on input
             searchInput.addEventListener("input", (e) => {
