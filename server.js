@@ -69,14 +69,30 @@ app.get("/api/materials", async (req, res) => {
     return res.status(400).json({ error: "productId is required" });
   try {
     const pool = await getPool();
-    const result = await pool.request().input("productId", sql.Int, productId)
-      .query(`
-        SELECT m.MaterialId AS id, m.MaterialCode AS code, m.MaterialName AS name, b.ConsumePerUnit AS consume
+    const request = pool.request().input("productId", sql.Int, productId);
+    let result;
+    try {
+      result = await request.query(`
+        SELECT m.MaterialId AS id, m.MaterialCode AS code, m.MaterialName AS name, b.ConsumePerUnit AS consume,
+               ISNULL(m.SafetyStockQty, 0) AS safetyStockQty
         FROM BomLines b
         JOIN Materials m ON m.MaterialId = b.MaterialId
         WHERE b.ProductId = @productId
         ORDER BY m.MaterialCode
       `);
+    } catch (colErr) {
+      // Cột SafetyStockQty chưa tồn tại - chạy fix_safety_stock.sql
+      if (colErr.message && /SafetyStockQty|Invalid column name/i.test(colErr.message)) {
+        result = await pool.request().input("productId", sql.Int, productId).query(`
+          SELECT m.MaterialId AS id, m.MaterialCode AS code, m.MaterialName AS name, b.ConsumePerUnit AS consume
+          FROM BomLines b
+          JOIN Materials m ON m.MaterialId = b.MaterialId
+          WHERE b.ProductId = @productId
+          ORDER BY m.MaterialCode
+        `);
+        result.recordset = result.recordset.map((r) => ({ ...r, safetyStockQty: 0 }));
+      } else throw colErr;
+    }
     res.json(result.recordset);
   } catch (err) {
     console.error(err);

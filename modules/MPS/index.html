@@ -437,6 +437,7 @@
                         td.appendChild(input);
                     } else {
                         td.textContent = formatNumber(val);
+                        // Product: bôi đỏ khi balance < 0 (chưa quản lý tồn kho an toàn)
                         if (item.highlightNegative && val < 0) td.classList.add("text-negative");
                     }
                     tr.appendChild(td);
@@ -484,7 +485,12 @@
                         const td = document.createElement("td");
                         td.className = "text-center week-col";
                         td.textContent = formatNumber(val);
-                        if (item.highlightNegative && val < 0) td.classList.add("text-negative");
+                        // Material: bôi đỏ khi balance < tồn kho an toàn (nếu chưa cấu hình thì dùng 0 = balance < 0)
+                        if (item.highlightNegative) {
+                            const safetyStock = Number(row.material.safetyStockQty ?? row.material.SafetyStockQty ?? 0);
+                            const numVal = Number(val);
+                            if (numVal < safetyStock) td.classList.add("text-negative");
+                        }
                         tr.appendChild(td);
                     });
 

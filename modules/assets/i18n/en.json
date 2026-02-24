@@ -239,10 +239,10 @@
     "searchPlaceholder": "Search PO, Invoice, Supplier...",
     "allStatus": "All",
     "status": {
-      "INITIAL": "INITIAL",
-      "CONFIRM": "CONFIRM",
-      "RECEIVED": "RECEIVED",
-      "CANCELLED": "CANCELLED"
+      "INITIAL": "Initial",
+      "CONFIRM": "Confirmed",
+      "RECEIVED": "Received",
+      "CANCELLED": "Cancelled"
     },
     "addOrder": "Add Purchase Order",
     "table": {

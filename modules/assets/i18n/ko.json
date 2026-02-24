@@ -239,10 +239,10 @@
     "searchPlaceholder": "PO, Invoice, 공급업체 검색...",
     "allStatus": "전체",
     "status": {
-      "INITIAL": "INITIAL",
-      "CONFIRM": "CONFIRM",
-      "RECEIVED": "RECEIVED",
-      "CANCELLED": "CANCELLED"
+      "INITIAL": "초기",
+      "CONFIRM": "확인됨",
+      "RECEIVED": "입고됨",
+      "CANCELLED": "취소됨"
     },
     "addOrder": "구매 주문서 추가",
     "table": {

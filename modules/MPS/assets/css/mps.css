@@ -92,6 +92,13 @@ body {
   background-color: #cece5f !important;
 }
 
+/* Đảm bảo text-negative (bôi đỏ) có hiệu lực trên dòng Balance của Material */
+.table-secondary-row td.text-negative,
+td.text-negative {
+  color: #e0004d !important;
+  font-weight: 600;
+}
+
 /* Fix alignment for number inputs in table cells */
 .week-col input[type="number"] {
   width: 100%;

@@ -239,10 +239,10 @@
     "searchPlaceholder": "Tìm PO, Invoice, NCC...",
     "allStatus": "Tất cả",
     "status": {
-      "INITIAL": "INITIAL",
-      "CONFIRM": "CONFIRM",
-      "RECEIVED": "RECEIVED",
-      "CANCELLED": "CANCELLED"
+      "INITIAL": "Khởi tạo",
+      "CONFIRM": "Đã xác nhận",
+      "RECEIVED": "Đã nhận",
+      "CANCELLED": "Đã hủy"
     },
     "addOrder": "Thêm phiếu mua hàng",
     "table": {

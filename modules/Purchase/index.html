@@ -395,6 +395,11 @@
         // Initialize
         loadMaterials();
         loadOrders();
+
+        // Re-render khi đổi ngôn ngữ để cập nhật status đã dịch
+        document.addEventListener("languageChanged", () => {
+            loadOrders();
+        });
     </script>
 </body>
 
