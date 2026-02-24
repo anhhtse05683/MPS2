@@ -244,7 +244,8 @@ app.get("/api/items", async (req, res) => {
              p.ImageUrl,
              ob.StartYear,
              ob.StartWeek,
-             ob.BalanceQty
+             ob.BalanceQty,
+             NULL AS SafetyStockQty
       FROM Products p
       LEFT JOIN OpeningBalances ob
         ON ob.ItemType = 'P' AND ob.ItemId = p.ProductId
@@ -257,7 +258,8 @@ app.get("/api/items", async (req, res) => {
              m.ImageUrl,
              ob.StartYear,
              ob.StartWeek,
-             ob.BalanceQty
+             ob.BalanceQty,
+             m.SafetyStockQty
       FROM Materials m
       LEFT JOIN OpeningBalances ob
         ON ob.ItemType = 'M' AND ob.ItemId = m.MaterialId
@@ -280,6 +282,7 @@ app.post("/api/items", async (req, res) => {
     openingYear,
     openingWeek,
     openingBalance,
+    safetyStockQty,
   } = req.body || {};
   const itemType = (type || "").toUpperCase();
   if (!["P", "M"].includes(itemType))
@@ -307,11 +310,12 @@ app.post("/api/items", async (req, res) => {
       request
         .input("code", sql.NVarChar, code)
         .input("name", sql.NVarChar, name)
-        .input("imageUrl", sql.NVarChar(sql.MAX), imageUrl || null);
+        .input("imageUrl", sql.NVarChar(sql.MAX), imageUrl || null)
+        .input("safetyStockQty", sql.Decimal(18, 3), safetyStockQty != null ? Number(safetyStockQty) : 0);
       insertQuery = `
-        INSERT INTO Materials (MaterialCode, MaterialName, ImageUrl)
+        INSERT INTO Materials (MaterialCode, MaterialName, ImageUrl, SafetyStockQty)
         OUTPUT INSERTED.MaterialId AS id
-        VALUES (@code, @name, @imageUrl);
+        VALUES (@code, @name, @imageUrl, @safetyStockQty);
       `;
     }
     const insertResult = await request.query(insertQuery);
@@ -346,7 +350,7 @@ app.post("/api/items", async (req, res) => {
 app.put("/api/items/:type/:id", async (req, res) => {
   const itemType = (req.params.type || "").toUpperCase();
   const itemId = parseIntSafe(req.params.id);
-  const { code, name, imageUrl, openingYear, openingWeek, openingBalance } =
+  const { code, name, imageUrl, openingYear, openingWeek, openingBalance, safetyStockQty } =
     req.body || {};
   if (!["P", "M"].includes(itemType))
     return res.status(400).json({ error: "type must be P or M" });
@@ -370,11 +374,13 @@ app.put("/api/items/:type/:id", async (req, res) => {
         WHERE ProductId = @id;
       `);
     } else {
+      request.input("safetyStockQty", sql.Decimal(18, 3), safetyStockQty != null ? Number(safetyStockQty) : 0);
       await request.query(`
         UPDATE Materials
         SET MaterialCode = COALESCE(@code, MaterialCode),
             MaterialName = COALESCE(@name, MaterialName),
             ImageUrl = @imageUrl,
+            SafetyStockQty = @safetyStockQty,
             UpdatedAt = SYSDATETIME()
         WHERE MaterialId = @id;
       `);
@@ -453,6 +459,7 @@ app.post("/api/items/import", upload.single("file"), async (req, res) => {
       const openingYear = row.StartYear || row.OpenYear;
       const openingWeek = row.StartWeek || row.OpenWeek;
       const openingBalance = row.Balance || row.OpeningBalance;
+      const safetyStockQty = row.SafetyStockQty ?? row.SafetyStock ?? row.SafeStock ?? null;
 
       // Upsert product/material by code
       const request = pool
@@ -474,15 +481,16 @@ app.post("/api/items/import", upload.single("file"), async (req, res) => {
             OUTPUT INSERTED.ProductId AS id;
           `;
       } else {
+        request.input("safetyStockQty", sql.Decimal(18, 3), safetyStockQty != null ? Number(safetyStockQty) : 0);
         mergeQuery = `
             MERGE Materials AS target
             USING (SELECT @code AS MaterialCode) AS src
             ON target.MaterialCode = src.MaterialCode
             WHEN MATCHED THEN
-              UPDATE SET MaterialName=@name, ImageUrl=@imageUrl, UpdatedAt=SYSDATETIME()
+              UPDATE SET MaterialName=@name, ImageUrl=@imageUrl, SafetyStockQty=@safetyStockQty, UpdatedAt=SYSDATETIME()
             WHEN NOT MATCHED THEN
-              INSERT (MaterialCode, MaterialName, ImageUrl)
-              VALUES (@code, @name, @imageUrl)
+              INSERT (MaterialCode, MaterialName, ImageUrl, SafetyStockQty)
+              VALUES (@code, @name, @imageUrl, @safetyStockQty)
             OUTPUT INSERTED.MaterialId AS id;
           `;
       }

@@ -39,6 +39,7 @@ CREATE TABLE Materials (
     MaterialCode NVARCHAR(50) NOT NULL UNIQUE,
     MaterialName NVARCHAR(200) NOT NULL,
     ImageUrl NVARCHAR(MAX) NULL,
+    SafetyStockQty DECIMAL(18,3) NULL DEFAULT 0,  -- Mức tồn kho an toàn
     CreatedAt DATETIME2 DEFAULT SYSDATETIME(),
     UpdatedAt DATETIME2 DEFAULT SYSDATETIME()
 );
