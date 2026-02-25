@@ -7,6 +7,7 @@ const xlsx = require("xlsx");
 const http = require("http");
 const { Server } = require("socket.io");
 const { getPool, sql } = require("./src/db");
+const auth = require("./src/auth");
 
 const app = express();
 const server = http.createServer(app);
@@ -36,14 +37,150 @@ const upload = multer({
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname)); // serve root static files
-// Serve static assets from modules (CSS, JS, images, etc.)
 app.use("/modules", express.static(path.join(__dirname, "modules")));
+
+// Auth middleware: protect /api/* except login & refresh
+app.use("/api", (req, res, next) => {
+  if (req.path === "/auth/login" || req.path === "/auth/refresh") return next();
+  return auth.authMiddleware(req, res, next);
+});
 
 const parseIntSafe = (v) =>
   v === undefined || v === null || v === "" ? null : parseInt(v, 10);
 
+// -------- Auth (public) ----------
+app.post("/api/auth/login", async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ error: "Username and password required" });
+  }
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input("username", sql.NVarChar, username)
+      .query(`
+        SELECT UserId, Username, PasswordHash, FullName, Email, Phone, DeptId, IsActive
+        FROM Users WHERE Username = @username AND IsActive = 1
+      `);
+    if (!result.recordset.length) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+    const user = result.recordset[0];
+    const valid = await auth.verifyPassword(password, user.PasswordHash);
+    if (!valid) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+    const accessToken = auth.generateAccessToken(user);
+    const refreshToken = auth.generateRefreshToken(user);
+    await pool
+      .request()
+      .input("userId", sql.Int, user.UserId)
+      .input("token", sql.NVarChar, refreshToken)
+      .input("expiresAt", sql.DateTime2, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
+      .query(`
+        INSERT INTO RefreshTokens (UserId, Token, ExpiresAt) VALUES (@userId, @token, @expiresAt)
+      `);
+    const perms = await pool
+      .request()
+      .input("userId", sql.Int, user.UserId)
+      .query(`
+        SELECT p.PermissionCode FROM UserRoles ur
+        JOIN RolePermissions rp ON rp.RoleId = ur.RoleId
+        JOIN Permissions p ON p.PermissionId = rp.PermissionId
+        WHERE ur.UserId = @userId
+      `);
+    const roles = await pool
+      .request()
+      .input("userId", sql.Int, user.UserId)
+      .query(`SELECT r.RoleCode FROM UserRoles ur JOIN Roles r ON r.RoleId = ur.RoleId WHERE ur.UserId = @userId`);
+    let permCodes = (perms.recordset || []).map((p) => p.PermissionCode);
+    if ((roles.recordset || []).some((r) => r.RoleCode === "admin")) permCodes = ["admin", ...permCodes];
+    res.json({
+      accessToken,
+      refreshToken,
+      expiresIn: 900,
+      user: {
+        id: user.UserId,
+        username: user.Username,
+        fullName: user.FullName,
+        email: user.Email,
+        phone: user.Phone,
+        deptId: user.DeptId,
+      },
+      permissions: permCodes,
+    });
+  } catch (err) {
+    console.error("[Auth] Login error:", err);
+    res.status(500).json({ error: "Login failed" });
+  }
+});
+
+app.post("/api/auth/refresh", async (req, res) => {
+  const { refreshToken } = req.body || {};
+  if (!refreshToken) return res.status(400).json({ error: "Refresh token required" });
+  const payload = auth.verifyRefreshToken(refreshToken);
+  if (!payload) return res.status(401).json({ error: "Invalid or expired refresh token" });
+  try {
+    const pool = await getPool();
+    const tokenRow = await pool
+      .request()
+      .input("token", sql.NVarChar, refreshToken)
+      .query(`
+        SELECT rt.UserId, u.Username, u.FullName, u.Email, u.Phone, u.DeptId
+        FROM RefreshTokens rt
+        JOIN Users u ON u.UserId = rt.UserId
+        WHERE rt.Token = @token AND rt.RevokedAt IS NULL AND rt.ExpiresAt > SYSDATETIME()
+      `);
+    if (!tokenRow.recordset.length) {
+      return res.status(401).json({ error: "Refresh token invalid or revoked" });
+    }
+    const user = tokenRow.recordset[0];
+    const accessToken = auth.generateAccessToken(user);
+    res.json({ accessToken, expiresIn: 900 });
+  } catch (err) {
+    console.error("[Auth] Refresh error:", err);
+    res.status(500).json({ error: "Refresh failed" });
+  }
+});
+
+app.get("/api/auth/me", auth.authMiddleware, async (req, res) => {
+  try {
+    const pool = await getPool();
+    const perms = await pool
+      .request()
+      .input("userId", sql.Int, req.user.UserId)
+      .query(`
+        SELECT p.PermissionCode FROM UserRoles ur
+        JOIN RolePermissions rp ON rp.RoleId = ur.RoleId
+        JOIN Permissions p ON p.PermissionId = rp.PermissionId
+        WHERE ur.UserId = @userId
+      `);
+    const roles = await pool
+      .request()
+      .input("userId", sql.Int, req.user.UserId)
+      .query(`SELECT r.RoleCode FROM UserRoles ur JOIN Roles r ON r.RoleId = ur.RoleId WHERE ur.UserId = @userId`);
+    let permCodes = (perms.recordset || []).map((p) => p.PermissionCode);
+    if ((roles.recordset || []).some((r) => r.RoleCode === "admin")) permCodes = ["admin", ...permCodes];
+    res.json({
+      user: {
+        id: req.user.UserId,
+        username: req.user.Username,
+        fullName: req.user.FullName,
+        email: req.user.Email,
+        phone: req.user.Phone,
+        deptId: req.user.DeptId,
+        deptName: req.user.DeptName,
+      },
+      permissions: permCodes,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get user" });
+  }
+});
+
 // -------- Products ----------
-app.get("/api/products", async (_req, res) => {
+app.get("/api/products", auth.requirePermission("product.view"), async (_req, res) => {
   try {
     const pool = await getPool();
     const result = await pool.request().query(
@@ -63,7 +200,7 @@ app.get("/api/products", async (_req, res) => {
 });
 
 // -------- Materials by product (via BOM) ----------
-app.get("/api/materials", async (req, res) => {
+app.get("/api/materials", auth.requirePermission("product.view"), async (req, res) => {
   const productId = parseIntSafe(req.query.productId);
   if (!productId)
     return res.status(400).json({ error: "productId is required" });
@@ -101,7 +238,7 @@ app.get("/api/materials", async (req, res) => {
 });
 
 // -------- Opening balance (get) ----------
-app.get("/api/opening-balance/:type/:id", async (req, res) => {
+app.get("/api/opening-balance/:type/:id", auth.requirePermission("product.view"), async (req, res) => {
   const { type, id } = req.params; // type: product|material
   const itemType = type === "product" ? "P" : "M";
   const itemId = parseIntSafe(id);
@@ -124,7 +261,7 @@ app.get("/api/opening-balance/:type/:id", async (req, res) => {
 });
 
 // -------- Opening balance (upsert) ----------
-app.put("/api/opening-balance", async (req, res) => {
+app.put("/api/opening-balance", auth.requirePermission("product.edit"), async (req, res) => {
   const { itemType, itemId, startYear, startWeek, balanceQty } = req.body;
   if (!["P", "M"].includes(itemType))
     return res.status(400).json({ error: "itemType must be P or M" });
@@ -156,7 +293,7 @@ app.put("/api/opening-balance", async (req, res) => {
 });
 
 // -------- Production (ACTIVE/COMPLETE) ----------
-app.get("/api/production", async (req, res) => {
+app.get("/api/production", auth.requirePermission("production.view"), async (req, res) => {
   const productId = parseIntSafe(req.query.productId);
   const fromYear = parseIntSafe(req.query.fromYear);
   const fromWeek = parseIntSafe(req.query.fromWeek);
@@ -195,7 +332,7 @@ app.get("/api/production", async (req, res) => {
 });
 
 // -------- Purchase (CONFIRM) - for MPS module ----------
-app.get("/api/purchase", async (req, res) => {
+app.get("/api/purchase", auth.requirePermission("mps.view"), async (req, res) => {
   const materialId = parseIntSafe(req.query.materialId);
   const fromYear = parseIntSafe(req.query.fromYear);
   const fromWeek = parseIntSafe(req.query.fromWeek);
@@ -231,7 +368,7 @@ app.get("/api/purchase", async (req, res) => {
 });
 
 // -------- Item master (Products + Materials) ----------
-app.get("/api/items", async (req, res) => {
+app.get("/api/items", auth.requirePermission("product.view"), async (req, res) => {
   const q = (req.query.q || "").trim();
   const type = (req.query.type || "").toUpperCase(); // 'P' | 'M' | ''
   try {
@@ -289,7 +426,7 @@ app.get("/api/items", async (req, res) => {
   }
 });
 
-app.post("/api/items", async (req, res) => {
+app.post("/api/items", auth.requirePermission("product.edit"), async (req, res) => {
   const {
     type,
     code,
@@ -363,7 +500,7 @@ app.post("/api/items", async (req, res) => {
   }
 });
 
-app.put("/api/items/:type/:id", async (req, res) => {
+app.put("/api/items/:type/:id", auth.requirePermission("product.edit"), async (req, res) => {
   const itemType = (req.params.type || "").toUpperCase();
   const itemId = parseIntSafe(req.params.id);
   const { code, name, imageUrl, openingYear, openingWeek, openingBalance, safetyStockQty } =
@@ -428,7 +565,7 @@ app.put("/api/items/:type/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/items/:type/:id", async (req, res) => {
+app.delete("/api/items/:type/:id", auth.requirePermission("product.edit"), async (req, res) => {
   const itemType = (req.params.type || "").toUpperCase();
   const itemId = parseIntSafe(req.params.id);
   if (!["P", "M"].includes(itemType))
@@ -457,7 +594,7 @@ app.delete("/api/items/:type/:id", async (req, res) => {
 });
 
 // Bulk import items from Excel
-app.post("/api/items/import", upload.single("file"), async (req, res) => {
+app.post("/api/items/import", auth.requirePermission("product.edit"), upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "file is required" });
   try {
     const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
@@ -541,7 +678,7 @@ app.post("/api/items/import", upload.single("file"), async (req, res) => {
 });
 
 // -------- Production Orders CRUD (for Production module) ----------
-app.get("/api/production-orders", async (req, res) => {
+app.get("/api/production-orders", auth.requirePermission("production.view"), async (req, res) => {
   const productId = parseIntSafe(req.query.productId);
   const status = (req.query.status || "").toUpperCase(); // INITIAL, ACTIVE, COMPLETE, empty = all
   const fromYear = parseIntSafe(req.query.fromYear);
@@ -595,7 +732,7 @@ app.get("/api/production-orders", async (req, res) => {
   }
 });
 
-app.post("/api/production-orders", async (req, res) => {
+app.post("/api/production-orders", auth.requirePermission("production.edit"), async (req, res) => {
   const { productId, quantity, planYear, planWeek, status } = req.body || {};
   if (!productId || !quantity || !planYear || !planWeek)
     return res
@@ -643,7 +780,7 @@ app.post("/api/production-orders", async (req, res) => {
   }
 });
 
-app.put("/api/production-orders/:id", async (req, res) => {
+app.put("/api/production-orders/:id", auth.requirePermission("production.edit"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
   const { productId, quantity, planYear, planWeek, status } = req.body || {};
@@ -693,7 +830,7 @@ app.put("/api/production-orders/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/production-orders/:id", async (req, res) => {
+app.delete("/api/production-orders/:id", auth.requirePermission("production.edit"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
   try {
@@ -719,7 +856,7 @@ app.delete("/api/production-orders/:id", async (req, res) => {
 });
 
 // -------- Purchase Orders CRUD (for Purchase module) ----------
-app.get("/api/purchase-orders", async (req, res) => {
+app.get("/api/purchase-orders", auth.requirePermission("purchase.view"), async (req, res) => {
   const status = (req.query.status || "").toUpperCase(); // INITIAL, CONFIRM, RECEIVED, CANCELLED, empty = all
   const supplierName = req.query.supplierName || "";
   const poNumber = req.query.poNumber || "";
@@ -770,7 +907,7 @@ app.get("/api/purchase-orders", async (req, res) => {
   }
 });
 
-app.get("/api/purchase-orders/:id", async (req, res) => {
+app.get("/api/purchase-orders/:id", auth.requirePermission("purchase.view"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
   try {
@@ -802,7 +939,7 @@ app.get("/api/purchase-orders/:id", async (req, res) => {
   }
 });
 
-app.get("/api/purchase-orders/:id/lines", async (req, res) => {
+app.get("/api/purchase-orders/:id/lines", auth.requirePermission("purchase.view"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
   try {
@@ -831,7 +968,7 @@ app.get("/api/purchase-orders/:id/lines", async (req, res) => {
   }
 });
 
-app.post("/api/purchase-orders", async (req, res) => {
+app.post("/api/purchase-orders", auth.requirePermission("purchase.add"), async (req, res) => {
   const {
     poNumber,
     invoiceNumber,
@@ -929,7 +1066,7 @@ app.post("/api/purchase-orders", async (req, res) => {
   }
 });
 
-app.put("/api/purchase-orders/:id", async (req, res) => {
+app.put("/api/purchase-orders/:id", auth.requirePermission("purchase.edit"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
   const {
@@ -1077,7 +1214,7 @@ app.put("/api/purchase-orders/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/purchase-orders/:id", async (req, res) => {
+app.delete("/api/purchase-orders/:id", auth.requirePermission("purchase.delete"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
   try {
@@ -1103,7 +1240,7 @@ app.delete("/api/purchase-orders/:id", async (req, res) => {
 });
 
 // -------- Sales Orders CRUD (for Sales module) ----------
-app.get("/api/sales-orders", async (req, res) => {
+app.get("/api/sales-orders", auth.requirePermission("sales.view"), async (req, res) => {
   const status = (req.query.status || "").toUpperCase();
   const search = (req.query.search || "").trim();
 
@@ -1146,7 +1283,7 @@ app.get("/api/sales-orders", async (req, res) => {
   }
 });
 
-app.get("/api/sales-orders/:id", async (req, res) => {
+app.get("/api/sales-orders/:id", auth.requirePermission("sales.view"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
   try {
@@ -1176,7 +1313,7 @@ app.get("/api/sales-orders/:id", async (req, res) => {
   }
 });
 
-app.get("/api/sales-orders/:id/lines", async (req, res) => {
+app.get("/api/sales-orders/:id/lines", auth.requirePermission("sales.view"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
   try {
@@ -1203,7 +1340,7 @@ app.get("/api/sales-orders/:id/lines", async (req, res) => {
   }
 });
 
-app.post("/api/sales-orders", async (req, res) => {
+app.post("/api/sales-orders", auth.requirePermission("sales.add"), async (req, res) => {
   const {
     invoiceNumber,
     customerName,
@@ -1284,7 +1421,7 @@ app.post("/api/sales-orders", async (req, res) => {
   }
 });
 
-app.put("/api/sales-orders/:id", async (req, res) => {
+app.put("/api/sales-orders/:id", auth.requirePermission("sales.edit"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
   const {
@@ -1396,7 +1533,7 @@ app.put("/api/sales-orders/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/sales-orders/:id", async (req, res) => {
+app.delete("/api/sales-orders/:id", auth.requirePermission("sales.delete"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
   try {
@@ -1418,7 +1555,7 @@ app.delete("/api/sales-orders/:id", async (req, res) => {
 });
 
 // -------- Sales actual (CONFIRM) - SHIP_QTY từ hóa đơn bán hàng cho MPS ----------
-app.get("/api/sales-actual", async (req, res) => {
+app.get("/api/sales-actual", auth.requirePermission("mps.view"), async (req, res) => {
   const productId = parseIntSafe(req.query.productId);
   const fromYear = parseIntSafe(req.query.fromYear);
   const fromWeek = parseIntSafe(req.query.fromWeek);
@@ -1459,7 +1596,7 @@ app.get("/api/sales-actual", async (req, res) => {
 });
 
 // -------- Sales plan (SHIP_QTY forecast) ----------
-app.get("/api/sales-plan", async (req, res) => {
+app.get("/api/sales-plan", auth.requirePermission("mps.view"), async (req, res) => {
   const productId = parseIntSafe(req.query.productId);
   const fromYear = parseIntSafe(req.query.fromYear);
   const fromWeek = parseIntSafe(req.query.fromWeek);
@@ -1490,7 +1627,7 @@ app.get("/api/sales-plan", async (req, res) => {
 });
 
 // Upsert sales plan for a list of weeks
-app.put("/api/sales-plan", async (req, res) => {
+app.put("/api/sales-plan", auth.requirePermission("mps.edit"), async (req, res) => {
   const { productId, plans } = req.body; // plans: [{year, week, qty}]
   if (!productId || !Array.isArray(plans))
     return res.status(400).json({ error: "productId and plans[] required" });
@@ -1529,7 +1666,7 @@ app.put("/api/sales-plan", async (req, res) => {
 });
 
 // -------- Partners (Khách hàng + Nhà cung cấp) ----------
-app.get("/api/partners", async (req, res) => {
+app.get("/api/partners", auth.requirePermission("partners.view"), async (req, res) => {
   const type = (req.query.type || "").toUpperCase(); // 'C' | 'S' | ''
   const search = (req.query.search || "").trim();
   const page = Math.max(1, parseIntSafe(req.query.page) || 1);
@@ -1580,7 +1717,7 @@ app.get("/api/partners", async (req, res) => {
   }
 });
 
-app.get("/api/partners/:id", async (req, res) => {
+app.get("/api/partners/:id", auth.requirePermission("partners.view"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
   try {
@@ -1600,7 +1737,7 @@ app.get("/api/partners/:id", async (req, res) => {
   }
 });
 
-app.post("/api/partners", async (req, res) => {
+app.post("/api/partners", auth.requirePermission("partners.add"), async (req, res) => {
   const { code, name, type, taxCode, representative, phone, email, address, createdBy } = req.body || {};
   const partnerType = (type || "C").toUpperCase();
   if (!["C", "S"].includes(partnerType))
@@ -1634,7 +1771,7 @@ app.post("/api/partners", async (req, res) => {
   }
 });
 
-app.put("/api/partners/:id", async (req, res) => {
+app.put("/api/partners/:id", auth.requirePermission("partners.edit"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   const { code, name, type, taxCode, representative, phone, email, address, updatedBy } = req.body || {};
   if (!id) return res.status(400).json({ error: "Invalid id" });
@@ -1679,7 +1816,7 @@ app.put("/api/partners/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/partners/:id", async (req, res) => {
+app.delete("/api/partners/:id", auth.requirePermission("partners.delete"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
   try {
@@ -1689,6 +1826,209 @@ app.delete("/api/partners/:id", async (req, res) => {
   } catch (err) {
     console.error("[Partners API Error]", err);
     res.status(500).json({ error: "Failed to delete partner" });
+  }
+});
+
+// -------- Users (protected) ----------
+app.get("/api/users", auth.authMiddleware, auth.requirePermission("users.view"), async (req, res) => {
+  const search = (req.query.search || "").trim();
+  const deptId = parseIntSafe(req.query.deptId);
+  const isActive = req.query.isActive;
+  const page = Math.max(1, parseIntSafe(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(5, parseIntSafe(req.query.limit) || 20));
+  const offset = (page - 1) * limit;
+  try {
+    const pool = await getPool();
+    const conditions = [];
+    if (search) conditions.push("(u.Username LIKE @search OR u.FullName LIKE @search OR u.Email LIKE @search OR u.Phone LIKE @search)");
+    if (deptId) conditions.push("u.DeptId = @deptId");
+    if (isActive === "1" || isActive === "true") conditions.push("u.IsActive = 1");
+    else if (isActive === "0" || isActive === "false") conditions.push("u.IsActive = 0");
+    const whereSql = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
+    const makeReq = () => {
+      const req = pool.request();
+      req.input("limit", sql.Int, limit);
+      req.input("offset", sql.Int, offset);
+      if (search) req.input("search", sql.NVarChar, `%${search}%`);
+      if (deptId) req.input("deptId", sql.Int, deptId);
+      return req;
+    };
+    const countResult = await makeReq().query(`SELECT COUNT(*) AS total FROM Users u ${whereSql}`);
+    const total = countResult.recordset[0].total;
+    const result = await makeReq().query(`
+      SELECT u.UserId AS id, u.Username AS username, u.FullName AS fullName, u.Email AS email, u.Phone AS phone,
+             u.DeptId AS deptId, d.DeptName AS deptName, u.IsActive AS isActive,
+             u.CreatedAt AS createdAt, u.LastUpdateAt AS lastUpdateAt
+      FROM Users u
+      LEFT JOIN Department d ON d.DeptId = u.DeptId
+      ${whereSql}
+      ORDER BY u.Username
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    `);
+    res.json({ items: result.recordset, total, page, limit, totalPages: Math.ceil(total / limit) });
+  } catch (err) {
+    console.error("[Users API]", err);
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+app.get("/api/users/list", auth.authMiddleware, async (req, res) => {
+  try {
+    const pool = await getPool();
+    const result = await pool.request().query(`
+      SELECT UserId AS id, Username AS username, FullName AS fullName
+      FROM Users WHERE IsActive = 1 ORDER BY FullName
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+app.get("/api/users/:id", auth.authMiddleware, auth.requirePermission("users.view"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const result = await pool.request().input("id", sql.Int, id).query(`
+      SELECT u.UserId AS id, u.Username, u.FullName, u.Email, u.Phone, u.DeptId, u.IsActive,
+             u.CreatedAt, u.CreatedBy, u.LastUpdateAt, u.LastUpdateBy,
+             d.DeptName
+      FROM Users u LEFT JOIN Department d ON d.DeptId = u.DeptId
+      WHERE u.UserId = @id
+    `);
+    if (!result.recordset.length) return res.status(404).json({ error: "User not found" });
+    const user = result.recordset[0];
+    const roles = await pool.request().input("userId", sql.Int, id).query(`
+      SELECT r.RoleId, r.RoleCode, r.RoleName FROM UserRoles ur
+      JOIN Roles r ON r.RoleId = ur.RoleId WHERE ur.UserId = @userId
+    `);
+    user.roles = roles.recordset;
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch user" });
+  }
+});
+
+app.post("/api/users", auth.authMiddleware, auth.requirePermission("users.add"), async (req, res) => {
+  const { username, password, fullName, email, phone, deptId, isActive, roleIds } = req.body || {};
+  if (!username || !password || !fullName) {
+    return res.status(400).json({ error: "Username, password and fullName required" });
+  }
+  try {
+    const pool = await getPool();
+    const hash = await auth.hashPassword(password);
+    const result = await pool
+      .request()
+      .input("username", sql.NVarChar, username)
+      .input("hash", sql.NVarChar, hash)
+      .input("fullName", sql.NVarChar, fullName)
+      .input("email", sql.NVarChar, email || null)
+      .input("phone", sql.NVarChar, phone || null)
+      .input("deptId", sql.Int, deptId || null)
+      .input("isActive", sql.Bit, isActive !== false)
+      .input("createdBy", sql.Int, req.user?.UserId || null)
+      .query(`
+        INSERT INTO Users (Username, PasswordHash, FullName, Email, Phone, DeptId, IsActive, CreatedBy)
+        OUTPUT INSERTED.UserId AS id
+        VALUES (@username, @hash, @fullName, @email, @phone, @deptId, @isActive, @createdBy)
+      `);
+    const newId = result.recordset[0].id;
+    if (roleIds && Array.isArray(roleIds) && roleIds.length) {
+      for (const roleId of roleIds) {
+        await pool.request().input("userId", sql.Int, newId).input("roleId", sql.Int, roleId).query(`
+          INSERT INTO UserRoles (UserId, RoleId) VALUES (@userId, @roleId)
+        `);
+      }
+    } else {
+      await pool.request().input("userId", sql.Int, newId).input("roleId", sql.Int, 4).query(`
+        INSERT INTO UserRoles (UserId, RoleId) VALUES (@userId, @roleId)
+      `);
+    }
+    res.status(201).json({ id: newId });
+  } catch (err) {
+    if (err.message && /UNIQUE|duplicate/i.test(err.message)) {
+      return res.status(400).json({ error: "Username already exists" });
+    }
+    console.error("[Users API]", err);
+    res.status(500).json({ error: "Failed to create user" });
+  }
+});
+
+app.put("/api/users/:id", auth.authMiddleware, auth.requirePermission("users.edit"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  const { username, fullName, email, phone, deptId, isActive, password, roleIds } = req.body || {};
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const r = pool.request().input("id", sql.Int, id);
+    if (username !== undefined) r.input("username", sql.NVarChar, username);
+    if (fullName !== undefined) r.input("fullName", sql.NVarChar, fullName);
+    if (email !== undefined) r.input("email", sql.NVarChar, email || null);
+    if (phone !== undefined) r.input("phone", sql.NVarChar, phone || null);
+    if (deptId !== undefined) r.input("deptId", sql.Int, deptId || null);
+    if (isActive !== undefined) r.input("isActive", sql.Bit, isActive);
+    r.input("updatedBy", sql.Int, req.user?.UserId || null);
+    let setClause = "LastUpdateAt = SYSDATETIME(), LastUpdateBy = @updatedBy";
+    if (username !== undefined) setClause += ", Username = @username";
+    if (fullName !== undefined) setClause += ", FullName = @fullName";
+    if (email !== undefined) setClause += ", Email = @email";
+    if (phone !== undefined) setClause += ", Phone = @phone";
+    if (deptId !== undefined) setClause += ", DeptId = @deptId";
+    if (isActive !== undefined) setClause += ", IsActive = @isActive";
+    if (password) {
+      const hash = await auth.hashPassword(password);
+      r.input("hash", sql.NVarChar, hash);
+      setClause += ", PasswordHash = @hash";
+    }
+    await r.query(`UPDATE Users SET ${setClause} WHERE UserId = @id`);
+    if (roleIds !== undefined && Array.isArray(roleIds)) {
+      await pool.request().input("userId", sql.Int, id).query("DELETE FROM UserRoles WHERE UserId = @userId");
+      for (const roleId of roleIds) {
+        await pool.request().input("userId", sql.Int, id).input("roleId", sql.Int, roleId).query(`
+          INSERT INTO UserRoles (UserId, RoleId) VALUES (@userId, @roleId)
+        `);
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.message && /UNIQUE|duplicate/i.test(err.message)) {
+      return res.status(400).json({ error: "Username already exists" });
+    }
+    res.status(500).json({ error: "Failed to update user" });
+  }
+});
+
+app.delete("/api/users/:id", auth.authMiddleware, auth.requirePermission("users.delete"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  if (id === req.user.UserId) return res.status(400).json({ error: "Cannot delete yourself" });
+  try {
+    const pool = await getPool();
+    await pool.request().input("id", sql.Int, id).query("DELETE FROM Users WHERE UserId = @id");
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete user" });
+  }
+});
+
+app.get("/api/departments", auth.authMiddleware, async (req, res) => {
+  try {
+    const pool = await getPool();
+    const result = await pool.request().query("SELECT DeptId AS id, DeptName AS name FROM Department ORDER BY DeptName");
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch departments" });
+  }
+});
+
+app.get("/api/roles", auth.authMiddleware, async (req, res) => {
+  try {
+    const pool = await getPool();
+    const result = await pool.request().query("SELECT RoleId AS id, RoleCode AS code, RoleName AS name FROM Roles ORDER BY RoleCode");
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch roles" });
   }
 });
 
@@ -1706,6 +2046,11 @@ app.get("*", (req, res) => {
 });
 
 const port = process.env.PORT || 3000;
-server.listen(port, () => {
+server.listen(port, async () => {
   console.log(`Server running on http://localhost:${port}`);
+  try {
+    await auth.ensureAdminUser();
+  } catch (err) {
+    console.warn("[Auth] ensureAdminUser skipped (tables may not exist yet - run fix_auth.sql):", err.message);
+  }
 });

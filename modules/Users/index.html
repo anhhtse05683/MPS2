@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quản lý Người dùng</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <script src="/modules/assets/js/auth.js"></script>
+  <script src="/modules/assets/js/i18n.js"></script>
+  <style>
+    body { background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 50%, #f8fafc 100%); min-height: 100vh; padding: 1.5rem; }
+    .card { border-radius: 20px; box-shadow: 0 20px 60px rgba(34, 197, 94, 0.12); border: none; overflow: hidden; }
+    .card-header-custom { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: white; padding: 1.25rem 1.5rem; }
+    .btn-add { background: linear-gradient(135deg, #22c55e, #16a34a); border: none; color: white; }
+    .btn-add:hover { color: white; }
+    .table thead { background: #f1f5f9; }
+    .user-link { color: #22c55e; text-decoration: none; font-weight: 500; }
+    .badge-active { background: #22c55e; }
+    .badge-inactive { background: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-header-custom">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <h4><i class="bi bi-person-gear me-2"></i>Quản lý Người dùng</h4>
+          <small class="opacity-90">Quản lý tài khoản và phân quyền</small>
+        </div>
+        <button id="btnAdd" class="btn btn-light btn-add" style="display:none;"><i class="bi bi-plus-lg me-1"></i>Thêm mới</button>
+      </div>
+    </div>
+    <div class="card-body p-4">
+      <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <input id="searchInput" type="text" class="form-control form-control-sm" style="width:220px;" placeholder="Tìm username, tên, email...">
+          <select id="deptFilter" class="form-select form-select-sm" style="width:180px;">
+            <option value="">Tất cả phòng ban</option>
+          </select>
+          <select id="activeFilter" class="form-select form-select-sm" style="width:120px;">
+            <option value="">Tất cả</option>
+            <option value="1">Hoạt động</option>
+            <option value="0">Không hoạt động</option>
+          </select>
+        </div>
+        <div class="small text-muted" id="totalInfo">-</div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Họ tên</th>
+              <th>Email</th>
+              <th>Phòng ban</th>
+              <th>Trạng thái</th>
+              <th>Ngày tạo</th>
+              <th class="text-center">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="usersBody"></tbody>
+        </table>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+          <span class="small text-muted">Hiển thị</span>
+          <select id="limitSelect" class="form-select form-select-sm" style="width:70px;">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+          </select>
+          <span class="small text-muted">/ trang</span>
+        </div>
+        <nav><ul id="pagination" class="pagination pagination-sm mb-0"></ul></nav>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentPage = 1, totalPages = 1, totalItems = 0, lastItems = [];
+    const canAdd = window.Auth?.hasPermission?.("users.add") ?? true;
+    const canEdit = window.Auth?.hasPermission?.("users.edit") ?? true;
+    const canDelete = window.Auth?.hasPermission?.("users.delete") ?? true;
+    document.getElementById("btnAdd").style.display = canAdd ? "inline-block" : "none";
+
+    function formatDate(d) { return d ? new Date(d).toLocaleDateString("vi-VN") : "-"; }
+
+    async function fetchJson(url, opts = {}) {
+      const res = await fetch(url, opts);
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
+      return res.json();
+    }
+
+    async function loadDepts() {
+      try {
+        const data = await fetchJson("/api/departments");
+        const sel = document.getElementById("deptFilter");
+        (data || []).forEach(d => {
+          const o = document.createElement("option");
+          o.value = d.id ?? d.DeptId ?? "";
+          o.textContent = d.name ?? d.DeptName ?? "-";
+          sel.appendChild(o);
+        });
+      } catch (err) {
+        console.warn("[Users] loadDepts failed:", err);
+      }
+    }
+
+    async function loadUsers() {
+      try {
+        const params = new URLSearchParams();
+        params.append("page", currentPage);
+        params.append("limit", document.getElementById("limitSelect").value || 20);
+        const search = document.getElementById("searchInput").value.trim();
+        const deptId = document.getElementById("deptFilter").value;
+        const isActive = document.getElementById("activeFilter").value;
+        if (search) params.append("search", search);
+        if (deptId) params.append("deptId", deptId);
+        if (isActive) params.append("isActive", isActive);
+
+        const data = await fetchJson("/api/users?" + params);
+        lastItems = data.items || [];
+        totalItems = data.total;
+        totalPages = data.totalPages || 1;
+        document.getElementById("totalInfo").textContent = "Tổng: " + data.total + " bản ghi";
+        renderUsers(lastItems);
+        renderPagination();
+      } catch (err) {
+        document.getElementById("usersBody").innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">' + err.message + '</td></tr>';
+      }
+    }
+
+    function renderUsers(items) {
+      const body = document.getElementById("usersBody");
+      body.innerHTML = "";
+      if (!items?.length) { body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Chưa có dữ liệu</td></tr>'; return; }
+      items.forEach(u => {
+        const tr = document.createElement("tr");
+        tr.style.cursor = "pointer";
+        tr.onclick = () => { if (canEdit) location.href = "/modules/Users/detail.html?id=" + u.id; };
+        tr.innerHTML = `
+          <td><a href="/modules/Users/detail.html?id=${u.id}" class="user-link" onclick="event.stopPropagation()">${u.username || "-"}</a></td>
+          <td class="fw-medium">${u.fullName || "-"}</td>
+          <td>${u.email || "-"}</td>
+          <td>${u.deptName || "-"}</td>
+          <td><span class="badge ${u.isActive ? "badge-active" : "badge-inactive"}">${u.isActive ? "Hoạt động" : "Không hoạt động"}</span></td>
+          <td>${formatDate(u.createdAt)}</td>
+          <td class="text-center" onclick="event.stopPropagation()">
+            ${canEdit ? `<button class="btn btn-sm btn-outline-primary me-1" onclick="location.href='/modules/Users/detail.html?id=${u.id}'"><i class="bi bi-pencil"></i></button>` : ""}
+            ${canDelete ? `<button class="btn btn-sm btn-outline-danger" onclick="deleteUser(${u.id},event)"><i class="bi bi-trash"></i></button>` : ""}
+          </td>
+        `;
+        body.appendChild(tr);
+      });
+    }
+
+    function renderPagination() {
+      const ul = document.getElementById("pagination");
+      ul.innerHTML = "";
+      if (totalPages <= 1) return;
+      const add = (content, disabled, fn) => {
+        const li = document.createElement("li");
+        li.className = "page-item" + (disabled ? " disabled" : "");
+        const a = document.createElement("a");
+        a.className = "page-link";
+        a.href = "#";
+        a.innerHTML = content;
+        if (!disabled && fn) a.onclick = (e) => { e.preventDefault(); fn(); };
+        li.appendChild(a);
+        ul.appendChild(li);
+      };
+      add("<i class='bi bi-chevron-left'></i>", currentPage <= 1, () => { currentPage--; loadUsers(); });
+      for (let i = 1; i <= Math.min(totalPages, 7); i++) {
+        const li = document.createElement("li");
+        li.className = "page-item" + (i === currentPage ? " active" : "");
+        const a = document.createElement("a");
+        a.className = "page-link";
+        a.href = "#";
+        a.textContent = i;
+        a.onclick = (e) => { e.preventDefault(); currentPage = i; loadUsers(); };
+        li.appendChild(a);
+        ul.appendChild(li);
+      }
+      add("<i class='bi bi-chevron-right'></i>", currentPage >= totalPages, () => { currentPage++; loadUsers(); });
+    }
+
+    async function deleteUser(id, ev) {
+      ev.stopPropagation();
+      if (!confirm("Bạn có chắc muốn xóa người dùng này?")) return;
+      try {
+        await fetchJson("/api/users/" + id, { method: "DELETE" });
+        loadUsers();
+      } catch (err) { alert("Xóa thất bại: " + err.message); }
+    }
+
+    document.getElementById("btnAdd").onclick = () => location.href = "/modules/Users/detail.html";
+    document.getElementById("searchInput").oninput = () => { clearTimeout(window._t); window._t = setTimeout(() => { currentPage = 1; loadUsers(); }, 400); };
+    document.getElementById("deptFilter").onchange = () => { currentPage = 1; loadUsers(); };
+    document.getElementById("activeFilter").onchange = () => { currentPage = 1; loadUsers(); };
+    document.getElementById("limitSelect").onchange = () => { currentPage = 1; loadUsers(); };
+
+    loadDepts().then(loadUsers);
+  </script>
+</body>
+</html>
