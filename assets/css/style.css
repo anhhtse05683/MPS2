@@ -24,6 +24,7 @@ body {
   overflow: hidden;
 }
 
+
 .hero::after {
   content: "";
   position: absolute;

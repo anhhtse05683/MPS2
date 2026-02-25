@@ -1102,7 +1102,363 @@ app.delete("/api/purchase-orders/:id", async (req, res) => {
   }
 });
 
-// -------- Sales plan (SHIP_QTY) ----------
+// -------- Sales Orders CRUD (for Sales module) ----------
+app.get("/api/sales-orders", async (req, res) => {
+  const status = (req.query.status || "").toUpperCase();
+  const search = (req.query.search || "").trim();
+
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+    const where = [];
+    if (status) {
+      request.input("status", sql.NVarChar, status);
+      where.push("UPPER(so.Status) = @status");
+    }
+    if (search) {
+      request.input("search", sql.NVarChar, `%${search}%`);
+      where.push("(so.CustomerName LIKE @search OR so.InvoiceNumber LIKE @search OR so.CustomerCode LIKE @search)");
+    }
+
+    const whereSql = where.length ? "WHERE " + where.join(" AND ") : "";
+
+    const result = await request.query(`
+      SELECT so.SalesOrderId AS id,
+             so.InvoiceNumber,
+             so.CustomerName,
+             so.CustomerCode,
+             so.DeliveryDate,
+             so.Status,
+             so.Currency,
+             so.TotalAmount,
+             so.CreatedBy,
+             so.AssignedTo,
+             so.CreatedAt,
+             (SELECT COUNT(*) FROM SalesOrderLines sol WHERE sol.SalesOrderId = so.SalesOrderId) AS lineCount
+      FROM SalesOrders so
+      ${whereSql}
+      ORDER BY so.CreatedAt DESC, so.SalesOrderId DESC;
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("[SalesOrders List Error]", err);
+    res.status(500).json({ error: "Failed to fetch sales orders" });
+  }
+});
+
+app.get("/api/sales-orders/:id", async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const result = await pool.request().input("id", sql.Int, id).query(`
+        SELECT so.SalesOrderId AS id,
+               so.InvoiceNumber,
+               so.CustomerName,
+               so.CustomerCode,
+               so.DeliveryDate,
+               so.Status,
+               so.Currency,
+               so.TotalAmount,
+               so.CreatedBy,
+               so.AssignedTo,
+               so.CreatedAt,
+               so.UpdatedAt
+        FROM SalesOrders so
+        WHERE so.SalesOrderId = @id;
+      `);
+    if (!result.recordset.length)
+      return res.status(404).json({ error: "Sales order not found" });
+    res.json(result.recordset[0]);
+  } catch (err) {
+    console.error("[SalesOrder Detail Error]", err);
+    res.status(500).json({ error: "Failed to fetch sales order" });
+  }
+});
+
+app.get("/api/sales-orders/:id/lines", async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const result = await pool.request().input("id", sql.Int, id).query(`
+        SELECT sol.SalesOrderLineId AS id,
+               sol.SalesOrderId,
+               sol.ProductId,
+               p.ProductCode,
+               p.ProductName,
+               sol.Quantity,
+               sol.Unit,
+               sol.UnitPrice,
+               sol.TotalAmount
+        FROM SalesOrderLines sol
+        JOIN Products p ON p.ProductId = sol.ProductId
+        WHERE sol.SalesOrderId = @id
+        ORDER BY sol.SalesOrderLineId;
+      `);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("[SalesOrderLines Error]", err);
+    res.status(500).json({ error: "Failed to fetch sales order lines" });
+  }
+});
+
+app.post("/api/sales-orders", async (req, res) => {
+  const {
+    invoiceNumber,
+    customerName,
+    customerCode,
+    deliveryDate,
+    status,
+    currency,
+    createdBy,
+    assignedTo,
+    lines,
+  } = req.body || {};
+  const normStatus = (status || "INITIAL").toUpperCase();
+  if (!["INITIAL", "CONFIRM", "CANCELLED"].includes(normStatus))
+    return res.status(400).json({ error: "status must be INITIAL, CONFIRM or CANCELLED" });
+  if (!Array.isArray(lines) || !lines.length)
+    return res.status(400).json({ error: "lines array is required" });
+
+  let transaction;
+  try {
+    const pool = await getPool();
+    transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    const request = new sql.Request(transaction);
+
+    const totalAmount = lines.reduce(
+      (sum, line) => sum + (parseFloat(line.totalAmount) || 0),
+      0
+    );
+
+    request
+      .input("invoiceNumber", sql.NVarChar, invoiceNumber || null)
+      .input("customerName", sql.NVarChar, customerName || null)
+      .input("customerCode", sql.NVarChar, customerCode || null)
+      .input("deliveryDate", sql.Date, deliveryDate || null)
+      .input("totalAmount", sql.Decimal(18, 2), totalAmount)
+      .input("status", sql.NVarChar, normStatus)
+      .input("currency", sql.NVarChar, currency || "VND")
+      .input("createdBy", sql.NVarChar, createdBy || null)
+      .input("assignedTo", sql.NVarChar, assignedTo || null);
+
+    const soResult = await request.query(`
+      INSERT INTO SalesOrders (InvoiceNumber, CustomerName, CustomerCode, DeliveryDate, TotalAmount, Status, Currency, CreatedBy, AssignedTo)
+      OUTPUT INSERTED.SalesOrderId AS id
+      VALUES (@invoiceNumber, @customerName, @customerCode, @deliveryDate, @totalAmount, @status, @currency, @createdBy, @assignedTo);
+    `);
+    const soId = soResult.recordset[0].id;
+
+    for (const line of lines) {
+      const lineRequest = new sql.Request(transaction);
+      lineRequest
+        .input("salesOrderId", sql.Int, soId)
+        .input("productId", sql.Int, line.productId)
+        .input("quantity", sql.Decimal(18, 3), line.quantity)
+        .input("unit", sql.NVarChar, line.unit || "PCS")
+        .input("unitPrice", sql.Decimal(18, 2), line.unitPrice || 0)
+        .input("totalAmount", sql.Decimal(18, 2), line.totalAmount || 0);
+      await lineRequest.query(`
+        INSERT INTO SalesOrderLines (SalesOrderId, ProductId, Quantity, Unit, UnitPrice, TotalAmount)
+        VALUES (@salesOrderId, @productId, @quantity, @unit, @unitPrice, @totalAmount);
+      `);
+    }
+
+    await transaction.commit();
+
+    try {
+      io.emit("sales:changed", { type: "create", id: soId, status: normStatus });
+    } catch (notifyErr) {
+      console.error("[Socket] Failed to emit sales:changed (create)", notifyErr);
+    }
+
+    res.status(201).json({ id: soId });
+  } catch (err) {
+    console.error("[SalesOrders Create Error]", err);
+    try {
+      if (transaction) await transaction.rollback();
+    } catch (_) {}
+    res.status(500).json({ error: "Failed to create sales order" });
+  }
+});
+
+app.put("/api/sales-orders/:id", async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  const {
+    invoiceNumber,
+    customerName,
+    customerCode,
+    deliveryDate,
+    status,
+    currency,
+    createdBy,
+    assignedTo,
+    lines,
+  } = req.body || {};
+  const normStatus = status ? status.toUpperCase() : null;
+  if (normStatus && !["INITIAL", "CONFIRM", "CANCELLED"].includes(normStatus))
+    return res.status(400).json({ error: "status must be INITIAL, CONFIRM or CANCELLED" });
+
+  let transaction;
+  try {
+    const pool = await getPool();
+    transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    const request = new sql.Request(transaction).input("id", sql.Int, id);
+
+    const updates = [];
+    if (invoiceNumber !== undefined) {
+      request.input("invoiceNumber", sql.NVarChar, invoiceNumber || null);
+      updates.push("InvoiceNumber = @invoiceNumber");
+    }
+    if (customerName !== undefined) {
+      request.input("customerName", sql.NVarChar, customerName || null);
+      updates.push("CustomerName = @customerName");
+    }
+    if (customerCode !== undefined) {
+      request.input("customerCode", sql.NVarChar, customerCode || null);
+      updates.push("CustomerCode = @customerCode");
+    }
+    if (deliveryDate !== undefined) {
+      request.input("deliveryDate", sql.Date, deliveryDate || null);
+      updates.push("DeliveryDate = @deliveryDate");
+    }
+    if (normStatus) {
+      request.input("status", sql.NVarChar, normStatus);
+      updates.push("Status = @status");
+    }
+    if (currency !== undefined) {
+      request.input("currency", sql.NVarChar, currency || "VND");
+      updates.push("Currency = @currency");
+    }
+    if (createdBy !== undefined) {
+      request.input("createdBy", sql.NVarChar, createdBy || null);
+      updates.push("CreatedBy = @createdBy");
+    }
+    if (assignedTo !== undefined) {
+      request.input("assignedTo", sql.NVarChar, assignedTo || null);
+      updates.push("AssignedTo = @assignedTo");
+    }
+
+    if (updates.length) {
+      updates.push("UpdatedAt = SYSDATETIME()");
+      await request.query(`
+        UPDATE SalesOrders SET ${updates.join(", ")} WHERE SalesOrderId = @id;
+      `);
+    }
+
+    if (lines && Array.isArray(lines)) {
+      await request.query(`DELETE FROM SalesOrderLines WHERE SalesOrderId = @id;`);
+
+      for (const line of lines) {
+        const lineRequest = new sql.Request(transaction);
+        lineRequest
+          .input("salesOrderId", sql.Int, id)
+          .input("productId", sql.Int, line.productId)
+          .input("quantity", sql.Decimal(18, 3), line.quantity)
+          .input("unit", sql.NVarChar, line.unit || "PCS")
+          .input("unitPrice", sql.Decimal(18, 2), line.unitPrice || 0)
+          .input("totalAmount", sql.Decimal(18, 2), line.totalAmount || 0);
+        await lineRequest.query(`
+          INSERT INTO SalesOrderLines (SalesOrderId, ProductId, Quantity, Unit, UnitPrice, TotalAmount)
+          VALUES (@salesOrderId, @productId, @quantity, @unit, @unitPrice, @totalAmount);
+        `);
+      }
+
+      const totalResult = await request.query(`
+        SELECT SUM(TotalAmount) AS total FROM SalesOrderLines WHERE SalesOrderId = @id;
+      `);
+      const totalAmount = totalResult.recordset[0].total || 0;
+      request.input("totalAmount", sql.Decimal(18, 2), totalAmount);
+      await request.query(`
+        UPDATE SalesOrders SET TotalAmount = @totalAmount WHERE SalesOrderId = @id;
+      `);
+    }
+
+    await transaction.commit();
+
+    try {
+      io.emit("sales:changed", { type: "update", id, status: normStatus });
+    } catch (notifyErr) {
+      console.error("[Socket] Failed to emit sales:changed (update)", notifyErr);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[SalesOrders Update Error]", err);
+    try {
+      if (transaction) await transaction.rollback();
+    } catch (_) {}
+    res.status(500).json({ error: "Failed to update sales order" });
+  }
+});
+
+app.delete("/api/sales-orders/:id", async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    await pool
+      .request()
+      .input("id", sql.Int, id)
+      .query(`DELETE FROM SalesOrders WHERE SalesOrderId = @id;`);
+    try {
+      io.emit("sales:changed", { type: "delete", id });
+    } catch (notifyErr) {
+      console.error("[Socket] Failed to emit sales:changed (delete)", notifyErr);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[SalesOrders Delete Error]", err);
+    res.status(500).json({ error: "Failed to delete sales order" });
+  }
+});
+
+// -------- Sales actual (CONFIRM) - SHIP_QTY từ hóa đơn bán hàng cho MPS ----------
+app.get("/api/sales-actual", async (req, res) => {
+  const productId = parseIntSafe(req.query.productId);
+  const fromYear = parseIntSafe(req.query.fromYear);
+  const fromWeek = parseIntSafe(req.query.fromWeek);
+  const toYear = parseIntSafe(req.query.toYear);
+  const toWeek = parseIntSafe(req.query.toWeek);
+  if (!fromYear || !fromWeek || !toYear || !toWeek)
+    return res.status(400).json({ error: "fromYear/fromWeek/toYear/toWeek required" });
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+    if (productId) request.input("productId", sql.Int, productId);
+    request
+      .input("fromYear", sql.Int, fromYear)
+      .input("fromWeek", sql.Int, fromWeek)
+      .input("toYear", sql.Int, toYear)
+      .input("toWeek", sql.Int, toWeek);
+
+    const result = await request.query(`
+      SELECT sol.ProductId AS productId,
+             DATEPART(YEAR, so.DeliveryDate) AS year,
+             DATEPART(ISO_WEEK, so.DeliveryDate) AS week,
+             SUM(sol.Quantity) AS qty
+      FROM SalesOrderLines sol
+      JOIN SalesOrders so ON so.SalesOrderId = sol.SalesOrderId
+      WHERE UPPER(so.Status) = 'CONFIRM'
+        AND so.DeliveryDate IS NOT NULL
+        AND (DATEPART(YEAR, so.DeliveryDate) > @fromYear OR (DATEPART(YEAR, so.DeliveryDate) = @fromYear AND DATEPART(ISO_WEEK, so.DeliveryDate) >= @fromWeek))
+        AND (DATEPART(YEAR, so.DeliveryDate) < @toYear OR (DATEPART(YEAR, so.DeliveryDate) = @toYear AND DATEPART(ISO_WEEK, so.DeliveryDate) <= @toWeek))
+        AND (@productId IS NULL OR sol.ProductId = @productId)
+      GROUP BY sol.ProductId, DATEPART(YEAR, so.DeliveryDate), DATEPART(ISO_WEEK, so.DeliveryDate)
+      ORDER BY year, week
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("[Sales Actual Error]", err);
+    res.status(500).json({ error: "Failed to fetch sales actual" });
+  }
+});
+
+// -------- Sales plan (SHIP_QTY forecast) ----------
 app.get("/api/sales-plan", async (req, res) => {
   const productId = parseIntSafe(req.query.productId);
   const fromYear = parseIntSafe(req.query.fromYear);
@@ -1169,6 +1525,170 @@ app.put("/api/sales-plan", async (req, res) => {
       if (transaction) await transaction.rollback();
     } catch (_) {}
     res.status(500).json({ error: "Failed to upsert sales plan" });
+  }
+});
+
+// -------- Partners (Khách hàng + Nhà cung cấp) ----------
+app.get("/api/partners", async (req, res) => {
+  const type = (req.query.type || "").toUpperCase(); // 'C' | 'S' | ''
+  const search = (req.query.search || "").trim();
+  const page = Math.max(1, parseIntSafe(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(5, parseIntSafe(req.query.limit) || 20));
+  const offset = (page - 1) * limit;
+
+  try {
+    const pool = await getPool();
+    const conditions = [];
+    if (type === "C" || type === "S") conditions.push("PartnerType = @type");
+    if (search) conditions.push("(PartnerCode LIKE @search OR PartnerName LIKE @search OR TaxCode LIKE @search OR Representative LIKE @search OR Phone LIKE @search OR Email LIKE @search OR Address LIKE @search)");
+    const whereSql = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
+
+    const makeRequest = () => {
+      const r = pool.request();
+      r.input("limit", sql.Int, limit);
+      r.input("offset", sql.Int, offset);
+      if (type === "C" || type === "S") r.input("type", sql.Char(1), type);
+      if (search) r.input("search", sql.NVarChar, `%${search}%`);
+      return r;
+    };
+
+    const countResult = await makeRequest().query(`
+      SELECT COUNT(*) AS total FROM Partners ${whereSql};
+    `);
+    const total = countResult.recordset[0].total;
+
+    const result = await makeRequest().query(`
+      SELECT PartnerId AS id, PartnerCode AS code, PartnerName AS name, PartnerType AS type,
+             TaxCode AS taxCode, Representative AS representative, Phone AS phone, Email AS email, Address AS address,
+             CreatedBy AS createdBy, CreatedAt AS createdAt, UpdatedBy AS updatedBy, UpdatedAt AS updatedAt
+      FROM Partners
+      ${whereSql}
+      ORDER BY PartnerType, PartnerCode
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
+    `);
+
+    res.json({
+      items: result.recordset,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (err) {
+    console.error("[Partners API Error]", err);
+    res.status(500).json({ error: "Failed to fetch partners" });
+  }
+});
+
+app.get("/api/partners/:id", async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const result = await pool.request().input("id", sql.Int, id).query(`
+      SELECT PartnerId AS id, PartnerCode AS code, PartnerName AS name, PartnerType AS type,
+             TaxCode AS taxCode, Representative AS representative, Phone AS phone, Email AS email, Address AS address,
+             CreatedBy AS createdBy, CreatedAt AS createdAt, UpdatedBy AS updatedBy, UpdatedAt AS updatedAt
+      FROM Partners WHERE PartnerId = @id;
+    `);
+    if (!result.recordset.length)
+      return res.status(404).json({ error: "Partner not found" });
+    res.json(result.recordset[0]);
+  } catch (err) {
+    console.error("[Partners API Error]", err);
+    res.status(500).json({ error: "Failed to fetch partner" });
+  }
+});
+
+app.post("/api/partners", async (req, res) => {
+  const { code, name, type, taxCode, representative, phone, email, address, createdBy } = req.body || {};
+  const partnerType = (type || "C").toUpperCase();
+  if (!["C", "S"].includes(partnerType))
+    return res.status(400).json({ error: "type must be C (Customer) or S (Supplier)" });
+  if (!code || !name)
+    return res.status(400).json({ error: "code and name are required" });
+
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input("code", sql.NVarChar, code)
+      .input("name", sql.NVarChar, name)
+      .input("type", sql.Char(1), partnerType)
+      .input("taxCode", sql.NVarChar, taxCode || null)
+      .input("representative", sql.NVarChar, representative || null)
+      .input("phone", sql.NVarChar, phone || null)
+      .input("email", sql.NVarChar, email || null)
+      .input("address", sql.NVarChar, address || null)
+      .input("createdBy", sql.NVarChar, createdBy || null).query(`
+        INSERT INTO Partners (PartnerCode, PartnerName, PartnerType, TaxCode, Representative, Phone, Email, Address, CreatedBy)
+        OUTPUT INSERTED.PartnerId AS id
+        VALUES (@code, @name, @type, @taxCode, @representative, @phone, @email, @address, @createdBy);
+      `);
+    res.status(201).json({ id: result.recordset[0].id });
+  } catch (err) {
+    if (err.message && /UNIQUE|duplicate/i.test(err.message))
+      return res.status(400).json({ error: "Partner code already exists for this type" });
+    console.error("[Partners API Error]", err);
+    res.status(500).json({ error: "Failed to create partner" });
+  }
+});
+
+app.put("/api/partners/:id", async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  const { code, name, type, taxCode, representative, phone, email, address, updatedBy } = req.body || {};
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+
+  try {
+    const pool = await getPool();
+    const request = pool.request().input("id", sql.Int, id);
+    if (code !== undefined) request.input("code", sql.NVarChar, code);
+    if (name !== undefined) request.input("name", sql.NVarChar, name);
+    if (type !== undefined) {
+      const t = (type || "C").toUpperCase();
+      if (!["C", "S"].includes(t)) return res.status(400).json({ error: "type must be C or S" });
+      request.input("type", sql.Char(1), t);
+    }
+    if (taxCode !== undefined) request.input("taxCode", sql.NVarChar, taxCode || null);
+    if (representative !== undefined) request.input("representative", sql.NVarChar, representative || null);
+    if (phone !== undefined) request.input("phone", sql.NVarChar, phone || null);
+    if (email !== undefined) request.input("email", sql.NVarChar, email || null);
+    if (address !== undefined) request.input("address", sql.NVarChar, address || null);
+    request.input("updatedBy", sql.NVarChar, updatedBy || null);
+
+    await request.query(`
+      UPDATE Partners
+      SET PartnerCode = COALESCE(@code, PartnerCode),
+          PartnerName = COALESCE(@name, PartnerName),
+          PartnerType = COALESCE(@type, PartnerType),
+          TaxCode = @taxCode,
+          Representative = @representative,
+          Phone = @phone,
+          Email = @email,
+          Address = @address,
+          UpdatedBy = @updatedBy,
+          UpdatedAt = SYSDATETIME()
+      WHERE PartnerId = @id;
+    `);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.message && /UNIQUE|duplicate/i.test(err.message))
+      return res.status(400).json({ error: "Partner code already exists for this type" });
+    console.error("[Partners API Error]", err);
+    res.status(500).json({ error: "Failed to update partner" });
+  }
+});
+
+app.delete("/api/partners/:id", async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    await pool.request().input("id", sql.Int, id).query(`DELETE FROM Partners WHERE PartnerId = @id;`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[Partners API Error]", err);
+    res.status(500).json({ error: "Failed to delete partner" });
   }
 });
 

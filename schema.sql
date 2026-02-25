@@ -105,6 +105,42 @@ CREATE TABLE ProductionOrders (
 );
 GO
 
+-- Sales Orders (Phiếu bán hàng)
+IF OBJECT_ID('SalesOrderLines', 'U') IS NOT NULL DROP TABLE SalesOrderLines;
+GO
+IF OBJECT_ID('SalesOrders', 'U') IS NOT NULL DROP TABLE SalesOrders;
+GO
+CREATE TABLE SalesOrders (
+    SalesOrderId INT IDENTITY(1,1) PRIMARY KEY,
+    InvoiceNumber NVARCHAR(50) NULL, -- Số hóa đơn
+    CustomerName NVARCHAR(200) NULL, -- Tên khách hàng
+    CustomerCode NVARCHAR(50) NULL, -- Mã khách hàng
+    DeliveryDate DATE NULL, -- Ngày giao hàng (dùng để suy ra tuần/năm)
+    Status NVARCHAR(20) NOT NULL DEFAULT 'INITIAL', -- INITIAL, CONFIRM, CANCELLED
+    Currency NVARCHAR(10) DEFAULT 'VND',
+    TotalAmount DECIMAL(18,2) DEFAULT 0,
+    CreatedBy NVARCHAR(100) NULL,
+    AssignedTo NVARCHAR(100) NULL,
+    CreatedAt DATETIME2 DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 DEFAULT SYSDATETIME()
+);
+GO
+
+CREATE TABLE SalesOrderLines (
+    SalesOrderLineId INT IDENTITY(1,1) PRIMARY KEY,
+    SalesOrderId INT NOT NULL,
+    ProductId INT NOT NULL,
+    Quantity DECIMAL(18,3) NOT NULL,
+    Unit NVARCHAR(20) DEFAULT 'PCS',
+    UnitPrice DECIMAL(18,2) DEFAULT 0,
+    TotalAmount DECIMAL(18,2) DEFAULT 0,
+    CreatedAt DATETIME2 DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 DEFAULT SYSDATETIME(),
+    FOREIGN KEY (SalesOrderId) REFERENCES SalesOrders(SalesOrderId) ON DELETE CASCADE,
+    FOREIGN KEY (ProductId) REFERENCES Products(ProductId) ON DELETE CASCADE
+);
+GO
+
 -- Purchase Orders (Phiếu mua hàng)
 -- Drop child table first to avoid foreign key constraint error
 IF OBJECT_ID('PurchaseOrderLines', 'U') IS NOT NULL DROP TABLE PurchaseOrderLines;
@@ -159,6 +195,32 @@ CREATE INDEX IX_ProductionOrders_Status ON ProductionOrders(Status);
 CREATE INDEX IX_PurchaseOrders_Status ON PurchaseOrders(Status);
 CREATE INDEX IX_PurchaseOrderLines_MaterialId ON PurchaseOrderLines(MaterialId);
 CREATE INDEX IX_PurchaseOrderLines_EtaYear_EtaWeek ON PurchaseOrderLines(EtaYear, EtaWeek);
+CREATE INDEX IX_SalesOrders_Status ON SalesOrders(Status);
+CREATE INDEX IX_SalesOrders_DeliveryDate ON SalesOrders(DeliveryDate);
+CREATE INDEX IX_SalesOrderLines_ProductId ON SalesOrderLines(ProductId);
+GO
+
+-- Partners (Khách hàng + Nhà cung cấp)
+IF OBJECT_ID('Partners', 'U') IS NOT NULL DROP TABLE Partners;
+CREATE TABLE Partners (
+    PartnerId INT IDENTITY(1,1) PRIMARY KEY,
+    PartnerCode NVARCHAR(50) NOT NULL,
+    PartnerName NVARCHAR(200) NOT NULL,
+    PartnerType CHAR(1) NOT NULL DEFAULT 'C',  -- 'C' = Customer, 'S' = Supplier
+    TaxCode NVARCHAR(50) NULL,
+    Representative NVARCHAR(200) NULL,
+    Phone NVARCHAR(50) NULL,
+    Email NVARCHAR(200) NULL,
+    Address NVARCHAR(500) NULL,
+    CreatedBy NVARCHAR(100) NULL,
+    CreatedAt DATETIME2 DEFAULT SYSDATETIME(),
+    UpdatedBy NVARCHAR(100) NULL,
+    UpdatedAt DATETIME2 DEFAULT SYSDATETIME(),
+    UNIQUE(PartnerCode, PartnerType)
+);
+CREATE INDEX IX_Partners_PartnerType ON Partners(PartnerType);
+CREATE INDEX IX_Partners_PartnerCode ON Partners(PartnerCode);
+CREATE INDEX IX_Partners_PartnerName ON Partners(PartnerName);
 GO
 
 -- =============================================
@@ -220,8 +282,29 @@ INSERT INTO PurchaseOrderLines (PurchaseOrderId, MaterialId, Quantity, Unit, Uni
 (2, 3, 5, 'PCS', 500000, 2500000, 2025, 49);  -- NVL5: 5 units @ 500,000 = 2,500,000 arriving week 49/2025
 GO
 
--- Sales Plans (SHIP_QTY - có thể để trống, user sẽ nhập trong UI)
+-- Sales Plans (SHIP_QTY forecast - dự báo do user nhập)
 -- Không insert seed data, để user tự nhập
+
+-- Sales Orders (seed mẫu)
+INSERT INTO SalesOrders (InvoiceNumber, CustomerName, CustomerCode, DeliveryDate, Status, TotalAmount, CreatedBy) VALUES
+('SO-2025-001', N'Công ty Alpha', 'CUST-A', '2025-12-02', 'CONFIRM', 5000000, N'Nguyễn Văn A'),
+('SO-2025-002', N'Công ty Beta', 'CUST-B', '2025-12-09', 'CONFIRM', 4000000, N'Nguyễn Văn A'),
+('SO-2025-003', N'Công ty Gamma', 'CUST-C', '2025-12-16', 'INITIAL', 0, N'Nguyễn Văn A');
+GO
+
+INSERT INTO SalesOrderLines (SalesOrderId, ProductId, Quantity, Unit, UnitPrice, TotalAmount) VALUES
+(1, 1, 5, 'PCS', 1000000, 5000000),   -- Product 589: 5 units, week of 2025-12-02
+(2, 1, 3, 'PCS', 1000000, 3000000),   -- Product 589: 3 units, week of 2025-12-09
+(2, 2, 2, 'PCS', 500000, 1000000);    -- Product 990: 2 units
+GO
+
+-- Partners (Khách hàng + Nhà cung cấp)
+INSERT INTO Partners (PartnerCode, PartnerName, PartnerType, TaxCode, Representative, Phone, Email, Address, CreatedBy) VALUES
+('CUST001', N'Công ty Alpha', 'C', '0123456789', N'Nguyễn Văn A', '0901234567', 'alpha@example.com', N'123 Đường ABC, Quận 1, TP.HCM', N'System'),
+('CUST002', N'Công ty Beta', 'C', '0987654321', N'Trần Thị B', '0912345678', 'beta@example.com', N'456 Đường XYZ, Quận 2, TP.HCM', N'System'),
+('SUP001', N'Công ty ABC', 'S', '0111222333', N'Lê Văn C', '0923456789', 'abc@supplier.com', N'789 KCN A, Bình Dương', N'System'),
+('SUP002', N'Công ty XYZ', 'S', '0444555666', N'Phạm Thị D', '0934567890', 'xyz@supplier.com', N'321 KCN B, Đồng Nai', N'System');
+GO
 
 PRINT 'Database schema and seed data created successfully!';
 GO

@@ -120,7 +120,7 @@ const I18n = {
             const text = this.t(key, params);
             
             // Handle different element types
-            if (el.tagName === 'INPUT' && (el.type === 'text' || el.type === 'number')) {
+            if (el.tagName === 'INPUT' && (el.type === 'text' || el.type === 'number' || el.type === 'email' || el.type === 'search')) {
                 el.placeholder = text;
             } else if (el.tagName === 'INPUT' && (el.type === 'submit' || el.type === 'button')) {
                 el.value = text;

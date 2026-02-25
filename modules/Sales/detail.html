@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="sales.detailTitle">Chi tiết Đơn bán hàng</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="/modules/assets/js/i18n.js"></script>
+    <style>
+        body {
+            background: #f8fafc;
+            padding: 1rem;
+        }
+
+        .card {
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+            border: none;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, #16a34a 0%, #059669 100%);
+            color: white;
+            border-radius: 16px 16px 0 0 !important;
+            padding: 1.25rem 1.5rem;
+            border: none;
+        }
+
+        .card-header h5 {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .badge-status {
+            font-size: 0.75rem;
+            padding: 0.35em 0.65em;
+        }
+
+        .badge-status.INITIAL {
+            background-color: #e5e7eb;
+            color: #111827;
+        }
+
+        .badge-status.CONFIRM {
+            background-color: #2563eb;
+            color: #fff;
+        }
+
+        .badge-status.CANCELLED {
+            background-color: #dc2626;
+            color: #fff;
+        }
+
+        .form-label {
+            font-weight: 500;
+            color: #334155;
+            margin-bottom: 0.5rem;
+        }
+
+        .table thead {
+            background: #f1f5f9;
+        }
+
+        .table thead th {
+            border-bottom-width: 1px;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .line-row {
+            transition: background-color 0.15s;
+        }
+
+        .line-row:hover {
+            background-color: #f8fafc;
+        }
+
+        .btn-add-line {
+            border: 2px dashed #cbd5e1;
+            background: #f8fafc;
+            color: #64748b;
+        }
+
+        .btn-add-line:hover {
+            background: #e2e8f0;
+            border-color: #94a3b8;
+        }
+
+        .total-section {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .total-label {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        .total-amount {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #059669;
+        }
+
+        /* Custom searchable dropdown */
+        .product-select-wrapper {
+            position: relative;
+        }
+
+        .product-search-input {
+            width: 100%;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.875rem;
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+        }
+
+        .product-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+            max-height: 220px;
+            overflow-y: auto;
+            z-index: 99999;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Khi show: dùng fixed để thoát khỏi overflow của card-body */
+        .product-dropdown.show {
+            display: block;
+            position: fixed;
+        }
+
+        /* Đảm bảo vùng Products List có đủ không gian cho dropdown */
+        .materials-table-wrapper {
+            min-height: 180px;
+            padding-bottom: 1rem;
+        }
+
+        /* Mở rộng bảng Products List */
+        .materials-table-wrapper .table-responsive {
+            min-width: 900px;
+            width: 100%;
+        }
+
+        .materials-card .card-body {
+            padding-left: 1rem;
+            padding-right: 1rem;
+            overflow-x: auto;
+        }
+
+        .product-option {
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .product-option:hover {
+            background-color: #f8fafc;
+        }
+
+        .product-option.selected {
+            background-color: #dcfce7;
+            font-weight: 500;
+        }
+
+        .product-option-code {
+            font-weight: 600;
+            color: #16a34a;
+        }
+
+        .product-option-name {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-left: 0.5rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <a href="/modules/Sales/index.html" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> <span data-i18n="sales.backToList">Quay lại danh sách</span>
+            </a>
+        </div>
+        <div>
+            <button id="btnClone" class="btn btn-outline-success btn-sm" style="display: none;">
+                <i class="bi bi-copy"></i> <span data-i18n="sales.clone">Clone</span>
+            </button>
+            <button id="btnSave" class="btn btn-primary">
+                <i class="bi bi-save"></i> <span data-i18n="sales.save">Lưu</span>
+            </button>
+            <button id="btnCancel" class="btn btn-outline-secondary">
+                <i class="bi bi-x-lg"></i> <span data-i18n="sales.cancel">Hủy</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5><i class="bi bi-file-earmark-text"></i> <span data-i18n="sales.orderInfo">Thông tin Đơn bán hàng</span></h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label"><span data-i18n="sales.form.invoiceNumber">Số Invoice</span> <span class="text-danger">*</span></label>
+                    <input type="text" id="invoiceNumber" class="form-control" data-i18n="sales.form.invoiceNumberPlaceholder" placeholder="INV-2025-001">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="sales.form.customerName">Tên khách hàng</label>
+                    <input type="text" id="customerName" class="form-control" data-i18n="sales.form.customerNamePlaceholder" placeholder="Công ty ABC">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="sales.form.customerCode">Mã khách hàng</label>
+                    <input type="text" id="customerCode" class="form-control" data-i18n="sales.form.customerCodePlaceholder" placeholder="CUST001">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="sales.form.deliveryDate">Ngày giao hàng</label>
+                    <input type="date" id="deliveryDate" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label"><span data-i18n="sales.form.status">Trạng thái</span> <span class="text-danger">*</span></label>
+                    <select id="status" class="form-select">
+                        <option value="INITIAL" data-i18n="sales.status.INITIAL">INITIAL</option>
+                        <option value="CONFIRM" data-i18n="sales.status.CONFIRM">CONFIRM</option>
+                        <option value="CANCELLED" data-i18n="sales.status.CANCELLED">CANCELLED</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="sales.form.currency">Đơn vị tiền tệ</label>
+                    <select id="currency" class="form-select">
+                        <option value="VND">VND</option>
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="sales.form.createdBy">Người thao tác</label>
+                    <input type="text" id="createdBy" class="form-control" data-i18n="sales.form.createdByPlaceholder" placeholder="Nguyễn Văn A">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" data-i18n="sales.form.assignedTo">Người phụ trách</label>
+                    <input type="text" id="assignedTo" class="form-control" data-i18n="sales.form.assignedToPlaceholder" placeholder="Trần Thị B">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card materials-card">
+        <div class="card-header">
+            <h5><i class="bi bi-list-ul"></i> <span data-i18n="sales.productsList">Danh sách Sản phẩm</span></h5>
+        </div>
+        <div class="card-body">
+            <div class="materials-table-wrapper">
+                <div class="table-responsive">
+                    <table class="table table-bordered align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 5%;">#</th>
+                                <th style="width: 15%;" data-i18n="sales.table.productCode">Mã SP</th>
+                                <th style="width: 25%;" data-i18n="sales.table.productName">Tên SP</th>
+                                <th style="width: 10%;" data-i18n="sales.table.unit">Đơn vị</th>
+                                <th style="width: 12%;" data-i18n="sales.table.quantity">Số lượng</th>
+                                <th style="width: 12%;" data-i18n="sales.table.unitPrice">Đơn giá</th>
+                                <th style="width: 12%;" data-i18n="sales.table.lineTotal">Thành tiền</th>
+                                <th style="width: 9%;" data-i18n="sales.table.delete">Xóa</th>
+                            </tr>
+                        </thead>
+                        <tbody id="linesBody">
+                            <!-- Lines will be added here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <button id="btnAddLine" class="btn btn-add-line w-100 mt-3">
+                <i class="bi bi-plus-circle"></i> <span data-i18n="sales.addLine">Thêm dòng</span>
+            </button>
+            <div class="total-section">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="total-label" data-i18n="sales.totalAmount">Tổng tiền:</span>
+                    <span id="totalAmount" class="total-amount">0 VND</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let orderId = null;
+        let order = null;
+        let lines = [];
+        let products = [];
+
+        // Get order ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        orderId = urlParams.get("id") ? parseInt(urlParams.get("id")) : null;
+
+        // Format number
+        function formatNumber(num) {
+            if (num == null || num === undefined) return "0";
+            return parseFloat(num).toLocaleString("vi-VN", {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 3,
+            });
+        }
+
+        // Format currency
+        function formatCurrency(num, currency = "VND") {
+            if (num == null || num === undefined) return "0";
+            const formatted = parseFloat(num).toLocaleString("vi-VN", {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0,
+            });
+            return `${formatted} ${currency}`;
+        }
+
+        // Fetch JSON helper
+        async function fetchJson(url, options = {}) {
+            try {
+                const res = await fetch(url, options);
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ error: "Request failed" }));
+                    throw new Error(err.error || "Request failed");
+                }
+                return await res.json();
+            } catch (err) {
+                console.error("[Fetch Error]", err);
+                throw err;
+            }
+        }
+
+        // Load products
+        async function loadProducts() {
+            try {
+                products = await fetchJson("/api/items?type=P");
+            } catch (err) {
+                console.error("Failed to load products:", err);
+                products = [];
+            }
+        }
+
+        // Load order detail
+        async function loadOrder() {
+            if (!orderId) {
+                // New order
+                order = {
+                    InvoiceNumber: "",
+                    CustomerName: "",
+                    CustomerCode: "",
+                    DeliveryDate: null,
+                    Status: "INITIAL",
+                    Currency: "VND",
+                    CreatedBy: "",
+                    AssignedTo: "",
+                };
+                lines = [];
+                renderForm();
+                renderLines();
+                document.getElementById("btnClone").style.display = "none";
+                return;
+            }
+
+            try {
+                order = await fetchJson(`/api/sales-orders/${orderId}`);
+                const linesData = await fetchJson(`/api/sales-orders/${orderId}/lines`);
+                // Map API response fields (PascalCase) to camelCase
+                lines = linesData.map(line => ({
+                    id: line.id,
+                    salesOrderId: line.SalesOrderId,
+                    productId: line.ProductId,
+                    productCode: line.ProductCode,
+                    productName: line.ProductName,
+                    quantity: line.Quantity,
+                    unit: line.Unit,
+                    unitPrice: line.UnitPrice,
+                    totalAmount: line.TotalAmount,
+                }));
+                renderForm();
+                renderLines();
+                document.getElementById("btnClone").style.display = "inline-block";
+            } catch (err) {
+                alert((window.I18n?.t("sales.loadError") || "Lỗi tải dữ liệu: ") + err.message);
+                window.location.href = "/modules/Sales/index.html";
+            }
+        }
+
+        // Render form
+        function renderForm() {
+            document.getElementById("invoiceNumber").value = order.InvoiceNumber || "";
+            document.getElementById("customerName").value = order.CustomerName || "";
+            document.getElementById("customerCode").value = order.CustomerCode || "";
+            document.getElementById("deliveryDate").value = order.DeliveryDate ? order.DeliveryDate.split("T")[0] : "";
+            document.getElementById("status").value = order.Status || "INITIAL";
+            document.getElementById("currency").value = order.Currency || "VND";
+            document.getElementById("createdBy").value = order.CreatedBy || "";
+            document.getElementById("assignedTo").value = order.AssignedTo || "";
+        }
+
+        // Render lines
+        function renderLines() {
+            const body = document.getElementById("linesBody");
+            body.innerHTML = "";
+
+            if (!lines.length) {
+                const tr = document.createElement("tr");
+                const td = document.createElement("td");
+                td.colSpan = 8;
+                td.className = "text-center text-muted py-3";
+                td.textContent = window.I18n?.t("sales.noLines") || "Chưa có dòng nào. Nhấn 'Thêm dòng' để thêm.";
+                tr.appendChild(td);
+                body.appendChild(tr);
+            } else {
+                lines.forEach((line, idx) => {
+                    const tr = createLineRow(line, idx);
+                    body.appendChild(tr);
+                });
+            }
+
+            updateTotal();
+        }
+
+        // Create line row
+        function createLineRow(line, idx) {
+            const tr = document.createElement("tr");
+            tr.className = "line-row";
+            tr.dataset.index = idx;
+
+            // #
+            const numTd = document.createElement("td");
+            numTd.textContent = idx + 1;
+            tr.appendChild(numTd);
+
+            // Mã SP - Searchable dropdown
+            const codeTd = document.createElement("td");
+            const wrapper = document.createElement("div");
+            wrapper.className = "product-select-wrapper";
+
+            const searchInput = document.createElement("input");
+            searchInput.type = "text";
+            searchInput.className = "form-control form-control-sm product-search-input";
+            searchInput.placeholder = window.I18n?.t("sales.searchProduct") || "Tìm kiếm mã hoặc tên SP...";
+            searchInput.value = line.productCode || "";
+
+            const dropdown = document.createElement("div");
+            dropdown.className = "product-dropdown";
+
+            // Filter and render options
+            function renderOptions(searchTerm = "") {
+                dropdown.innerHTML = "";
+                const term = searchTerm.toLowerCase().trim();
+                const filtered = products.filter(p =>
+                    !term ||
+                    (p.code && p.code.toLowerCase().includes(term)) ||
+                    (p.name && p.name.toLowerCase().includes(term))
+                );
+
+                if (filtered.length === 0) {
+                    const noResult = document.createElement("div");
+                    noResult.className = "product-option";
+                    noResult.textContent = window.I18n?.t("sales.noProductFound") || "Không tìm thấy";
+                    noResult.style.cursor = "default";
+                    dropdown.appendChild(noResult);
+                } else {
+                    filtered.forEach(p => {
+                        const option = document.createElement("div");
+                        option.className = "product-option";
+                        if (line.productId === p.id) {
+                            option.classList.add("selected");
+                        }
+                        option.innerHTML = `
+                            <span class="product-option-code">${p.code || ""}</span>
+                            <span class="product-option-name">${p.name || ""}</span>
+                        `;
+                        option.addEventListener("click", () => {
+                            line.productId = p.id;
+                            line.productCode = p.code;
+                            line.productName = p.name;
+                            searchInput.value = p.code || "";
+                            const nameTd = tr.querySelector('[data-field="productName"]');
+                            if (nameTd) nameTd.textContent = p.name || "-";
+                            dropdown.classList.remove("show");
+                            updateLineTotal(idx);
+                        });
+                        dropdown.appendChild(option);
+                    });
+                }
+            }
+
+            // Initial render
+            renderOptions();
+
+            // Định vị dropdown theo viewport (fixed) để thoát overflow của card-body
+            function positionDropdown() {
+                if (!dropdown.classList.contains("show")) return;
+                const rect = searchInput.getBoundingClientRect();
+                dropdown.style.top = rect.bottom + "px";
+                dropdown.style.left = rect.left + "px";
+                dropdown.style.width = rect.width + "px";
+                dropdown.style.right = "auto";
+            }
+
+            // Show dropdown on focus/click
+            function showDropdown() {
+                dropdown.classList.add("show");
+                renderOptions(searchInput.value);
+                requestAnimationFrame(positionDropdown);
+            }
+
+            searchInput.addEventListener("focus", showDropdown);
+            searchInput.addEventListener("click", showDropdown);
+
+            // Cập nhật vị trí khi scroll
+            window.addEventListener("scroll", () => {
+                if (dropdown.classList.contains("show")) positionDropdown();
+            }, true);
+
+            // Search on input
+            searchInput.addEventListener("input", (e) => {
+                const searchValue = e.target.value;
+                if (!searchValue.trim()) {
+                    line.productId = null;
+                    line.productCode = "";
+                    line.productName = "";
+                    const nameTd = tr.querySelector('[data-field="productName"]');
+                    if (nameTd) nameTd.textContent = "-";
+                }
+                renderOptions(searchValue);
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener("click", (e) => {
+                if (!wrapper.contains(e.target)) {
+                    dropdown.classList.remove("show");
+                    if (!line.productId || searchInput.value !== line.productCode) {
+                        if (line.productId) {
+                            searchInput.value = line.productCode || "";
+                        } else {
+                            searchInput.value = "";
+                        }
+                    }
+                }
+            });
+
+            wrapper.appendChild(searchInput);
+            wrapper.appendChild(dropdown);
+            codeTd.appendChild(wrapper);
+            tr.appendChild(codeTd);
+
+            // Tên SP (read-only, updated by product selection)
+            const nameTd = document.createElement("td");
+            nameTd.dataset.field = "productName";
+            nameTd.textContent = line.productName || "-";
+            tr.appendChild(nameTd);
+
+            // Đơn vị
+            const unitTd = document.createElement("td");
+            const unitInput = document.createElement("input");
+            unitInput.type = "text";
+            unitInput.className = "form-control form-control-sm";
+            unitInput.dataset.field = "unit";
+            unitInput.value = line.unit || "PCS";
+            unitInput.addEventListener("change", () => {
+                line.unit = unitInput.value;
+            });
+            unitTd.appendChild(unitInput);
+            tr.appendChild(unitTd);
+
+            // Số lượng
+            const qtyTd = document.createElement("td");
+            const qtyInput = document.createElement("input");
+            qtyInput.type = "number";
+            qtyInput.className = "form-control form-control-sm text-end";
+            qtyInput.dataset.field = "quantity";
+            qtyInput.value = line.quantity || 0;
+            qtyInput.step = "0.001";
+            qtyInput.min = "0";
+            qtyInput.addEventListener("change", () => {
+                line.quantity = parseFloat(qtyInput.value) || 0;
+                updateLineTotal(idx);
+            });
+            qtyTd.appendChild(qtyInput);
+            tr.appendChild(qtyTd);
+
+            // Đơn giá
+            const priceTd = document.createElement("td");
+            const priceInput = document.createElement("input");
+            priceInput.type = "number";
+            priceInput.className = "form-control form-control-sm text-end";
+            priceInput.dataset.field = "unitPrice";
+            priceInput.value = line.unitPrice || 0;
+            priceInput.step = "0.01";
+            priceInput.min = "0";
+            priceInput.addEventListener("change", () => {
+                line.unitPrice = parseFloat(priceInput.value) || 0;
+                updateLineTotal(idx);
+            });
+            priceTd.appendChild(priceInput);
+            tr.appendChild(priceTd);
+
+            // Thành tiền
+            const totalTd = document.createElement("td");
+            totalTd.className = "text-end fw-semibold";
+            totalTd.dataset.field = "totalAmount";
+            totalTd.textContent = formatCurrency(line.totalAmount || 0, document.getElementById("currency").value);
+            tr.appendChild(totalTd);
+
+            // Delete button
+            const deleteTd = document.createElement("td");
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "btn btn-sm btn-outline-danger";
+            deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
+            deleteBtn.onclick = () => {
+                lines.splice(idx, 1);
+                renderLines();
+            };
+            deleteTd.appendChild(deleteBtn);
+            tr.appendChild(deleteTd);
+
+            return tr;
+        }
+
+        // Update line total
+        function updateLineTotal(idx) {
+            const line = lines[idx];
+            if (line) {
+                line.totalAmount = (line.quantity || 0) * (line.unitPrice || 0);
+                const row = document.querySelector(`tr[data-index="${idx}"]`);
+                if (row) {
+                    const totalTd = row.querySelector('[data-field="totalAmount"]');
+                    if (totalTd) {
+                        totalTd.textContent = formatCurrency(line.totalAmount, document.getElementById("currency").value);
+                    }
+                }
+                updateTotal();
+            }
+        }
+
+        // Update total
+        function updateTotal() {
+            const total = lines.reduce((sum, line) => sum + (line.totalAmount || 0), 0);
+            const currency = document.getElementById("currency").value;
+            document.getElementById("totalAmount").textContent = formatCurrency(total, currency);
+        }
+
+        // Add new line
+        document.getElementById("btnAddLine").addEventListener("click", () => {
+            lines.push({
+                productId: null,
+                productCode: "",
+                productName: "",
+                quantity: 0,
+                unit: "PCS",
+                unitPrice: 0,
+                totalAmount: 0,
+            });
+            renderLines();
+        });
+
+        // Clone order
+        document.getElementById("btnClone").addEventListener("click", async () => {
+            if (!orderId) return;
+            const confirmMsg = window.I18n?.t("sales.confirmClone") || "Bạn có chắc muốn clone đơn hàng này?";
+            if (!confirm(confirmMsg)) return;
+
+            const data = {
+                invoiceNumber: (document.getElementById("invoiceNumber").value.trim() || "") + " (Clone)",
+                customerName: document.getElementById("customerName").value.trim() || null,
+                customerCode: document.getElementById("customerCode").value.trim() || null,
+                deliveryDate: document.getElementById("deliveryDate").value || null,
+                status: "INITIAL",
+                currency: document.getElementById("currency").value,
+                createdBy: document.getElementById("createdBy").value.trim() || null,
+                assignedTo: document.getElementById("assignedTo").value.trim() || null,
+                lines: lines.map(line => ({
+                    productId: parseInt(line.productId),
+                    quantity: parseFloat(line.quantity) || 0,
+                    unit: line.unit || "PCS",
+                    unitPrice: parseFloat(line.unitPrice) || 0,
+                    totalAmount: parseFloat(line.totalAmount) || 0,
+                })),
+            };
+
+            try {
+                const result = await fetchJson("/api/sales-orders", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(data),
+                });
+                alert(window.I18n?.t("sales.cloneSuccess") || "Clone thành công!");
+                window.location.href = `/modules/Sales/detail.html?id=${result.id}`;
+            } catch (err) {
+                alert((window.I18n?.t("sales.cloneFailed") || "Clone thất bại: ") + err.message);
+            }
+        });
+
+        // Save order
+        document.getElementById("btnSave").addEventListener("click", async () => {
+            const invoiceNumber = document.getElementById("invoiceNumber").value.trim();
+            if (!invoiceNumber) {
+                alert(window.I18n?.t("sales.validation.invoiceNumberRequired") || "Vui lòng nhập Số Invoice");
+                return;
+            }
+
+            if (!lines.length) {
+                alert(window.I18n?.t("sales.validation.atLeastOneLine") || "Vui lòng thêm ít nhất một dòng sản phẩm");
+                return;
+            }
+
+            // Validate lines
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (!line.productId || line.productId === null || line.productId === undefined || line.productId === "") {
+                    const msg = (window.I18n?.t("sales.validation.selectProduct") || "Dòng {{line}}: Vui lòng chọn Sản phẩm").replace("{{line}}", i + 1);
+                    alert(msg);
+                    return;
+                }
+                const productIdNum = parseInt(line.productId);
+                if (isNaN(productIdNum) || productIdNum <= 0) {
+                    const msg = (window.I18n?.t("sales.validation.invalidProduct") || "Dòng {{line}}: Sản phẩm không hợp lệ").replace("{{line}}", i + 1);
+                    alert(msg);
+                    return;
+                }
+                if (!line.quantity || line.quantity <= 0) {
+                    const msg = (window.I18n?.t("sales.validation.quantityRequired") || "Dòng {{line}}: Vui lòng nhập Số lượng > 0").replace("{{line}}", i + 1);
+                    alert(msg);
+                    return;
+                }
+            }
+
+            const data = {
+                invoiceNumber: invoiceNumber,
+                customerName: document.getElementById("customerName").value.trim() || null,
+                customerCode: document.getElementById("customerCode").value.trim() || null,
+                deliveryDate: document.getElementById("deliveryDate").value || null,
+                status: document.getElementById("status").value,
+                currency: document.getElementById("currency").value,
+                createdBy: document.getElementById("createdBy").value.trim() || null,
+                assignedTo: document.getElementById("assignedTo").value.trim() || null,
+                lines: lines.map(line => ({
+                    productId: parseInt(line.productId),
+                    quantity: parseFloat(line.quantity) || 0,
+                    unit: line.unit || "PCS",
+                    unitPrice: parseFloat(line.unitPrice) || 0,
+                    totalAmount: parseFloat(line.totalAmount) || 0,
+                })),
+            };
+
+            try {
+                if (orderId) {
+                    await fetchJson(`/api/sales-orders/${orderId}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(data),
+                    });
+                    alert(window.I18n?.t("sales.updateSuccess") || "Cập nhật thành công!");
+                } else {
+                    const result = await fetchJson("/api/sales-orders", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(data),
+                    });
+                    alert(window.I18n?.t("sales.createSuccess") || "Tạo thành công!");
+                    window.location.href = `/modules/Sales/detail.html?id=${result.id}`;
+                    return;
+                }
+                loadOrder();
+            } catch (err) {
+                alert((window.I18n?.t("sales.saveFailed") || "Lưu thất bại: ") + err.message);
+            }
+        });
+
+        // Cancel
+        document.getElementById("btnCancel").addEventListener("click", () => {
+            const confirmMsg = window.I18n?.t("sales.confirmCancel") || "Bạn có chắc muốn hủy? Các thay đổi chưa lưu sẽ bị mất.";
+            if (confirm(confirmMsg)) {
+                window.location.href = "/modules/Sales/index.html";
+            }
+        });
+
+        // Currency change updates totals
+        document.getElementById("currency").addEventListener("change", () => {
+            renderLines();
+        });
+
+        // Initialize
+        loadProducts().then(() => {
+            loadOrder();
+        });
+
+        document.addEventListener("languageChanged", () => {
+            window.I18n?.updatePage();
+            renderLines();
+        });
+    </script>
+</body>
+
+</html>

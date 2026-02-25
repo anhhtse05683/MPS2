@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="partners.title">Quản lý Khách hàng & Nhà cung cấp</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="/modules/assets/js/i18n.js"></script>
+    <style>
+        body { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f8fafc 100%); min-height: 100vh; padding: 1.5rem; }
+        .card { border-radius: 20px; box-shadow: 0 20px 60px rgba(14, 165, 233, 0.12); border: none; overflow: hidden; }
+        .card-header-custom { background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: white; padding: 1.25rem 1.5rem; border: none; }
+        .card-header-custom h4 { margin: 0; font-weight: 600; }
+        .badge-customer { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: white; }
+        .badge-supplier { background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; }
+        .table thead { background: #f1f5f9; }
+        .table thead th { font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; }
+        .table tbody tr { transition: all 0.2s; }
+        .table tbody tr:hover { background: #f0f9ff; }
+        .partner-link { color: #0ea5e9; text-decoration: none; font-weight: 500; }
+        .partner-link:hover { text-decoration: underline; color: #0284c7; }
+        .pill-filter button.active { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: white; border: none; }
+        .pagination .page-link { border-radius: 8px !important; margin: 0 2px; }
+        .pagination .page-item.active .page-link { background: linear-gradient(135deg, #0ea5e9, #0284c7); border: none; }
+        .btn-add { background: linear-gradient(135deg, #0ea5e9, #0284c7); border: none; color: white; }
+        .btn-add:hover { background: linear-gradient(135deg, #0284c7, #0369a1); color: white; }
+        .search-wrap { position: relative; }
+        .search-wrap i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; }
+        .search-wrap input { padding-left: 38px; border-radius: 10px; }
+        .info-cell { font-size: 0.875rem; color: #64748b; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="card-header-custom">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h4><i class="bi bi-people-fill me-2"></i><span data-i18n="partners.title">Quản lý Khách hàng & Nhà cung cấp</span></h4>
+                    <small class="opacity-90"><span data-i18n="partners.subtitle">Quản lý thông tin khách hàng và nhà cung cấp</span></small>
+                </div>
+                <button id="btnAdd" class="btn btn-light btn-add">
+                    <i class="bi bi-plus-lg me-1"></i><span data-i18n="partners.add">Thêm mới</span>
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div class="search-wrap" style="width: 260px;">
+                        <i class="bi bi-search"></i>
+                        <input id="searchInput" type="text" class="form-control form-control-sm" data-i18n="partners.searchPlaceholder" placeholder="Tìm mã, tên, MST, SĐT, email...">
+                    </div>
+                    <div class="btn-group pill-filter" role="group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm active" data-type="" data-i18n="partners.allTypes">Tất cả</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-type="C" data-i18n="partners.typeCustomer">Khách hàng</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-type="S" data-i18n="partners.typeSupplier">Nhà cung cấp</button>
+                    </div>
+                </div>
+                <div class="small text-muted" id="totalInfo">-</div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th data-i18n="partners.table.code">Mã</th>
+                            <th data-i18n="partners.table.name">Tên</th>
+                            <th data-i18n="partners.table.type">Loại</th>
+                            <th data-i18n="partners.table.taxCode">Mã số thuế</th>
+                            <th data-i18n="partners.table.representative">Người đại diện</th>
+                            <th data-i18n="partners.table.phone">Số điện thoại</th>
+                            <th data-i18n="partners.table.email">Email</th>
+                            <th data-i18n="partners.table.createdBy">Người tạo</th>
+                            <th data-i18n="partners.table.createdAt">Ngày tạo</th>
+                            <th class="text-center" data-i18n="partners.table.actions">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="partnersBody"></tbody>
+                </table>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="small text-muted" data-i18n="partners.perPage">Hiển thị</span>
+                    <select id="limitSelect" class="form-select form-select-sm" style="width: 70px;">
+                        <option value="10">10</option>
+                        <option value="20" selected>20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                    <span class="small text-muted" data-i18n="partners.perPageSuffix">/ trang</span>
+                </div>
+                <nav>
+                    <ul id="pagination" class="pagination pagination-sm mb-0"></ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let totalPages = 1;
+        let totalItems = 0;
+        let lastItems = [];
+
+        function formatDate(dateStr) {
+            if (!dateStr) return "-";
+            return new Date(dateStr).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+        }
+
+        async function fetchJson(url, options = {}) {
+            const res = await fetch(url, options);
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: "Request failed" }));
+                throw new Error(err.error || "Request failed");
+            }
+            return res.json();
+        }
+
+        async function loadPartners() {
+            try {
+                const search = document.getElementById("searchInput").value.trim();
+                const type = document.querySelector(".pill-filter button.active")?.dataset.type || "";
+                const limit = parseInt(document.getElementById("limitSelect").value) || 20;
+
+                const params = new URLSearchParams();
+                params.append("page", currentPage);
+                params.append("limit", limit);
+                if (type) params.append("type", type);
+                if (search) params.append("search", search);
+
+                const data = await fetchJson("/api/partners?" + params.toString());
+                lastItems = data.items || [];
+                renderPartners(lastItems);
+                totalItems = data.total;
+                totalPages = data.totalPages || 1;
+                document.getElementById("totalInfo").textContent = (window.I18n?.t("partners.totalRecords") || "Tổng: {{total}} bản ghi").replace("{{total}}", data.total);
+                renderPagination();
+            } catch (err) {
+                const errLabel = (window.I18n?.t("common.error") || "Lỗi") + ": ";
+                document.getElementById("partnersBody").innerHTML =
+                    `<tr><td colspan="10" class="text-center text-danger py-4">${errLabel}${err.message}</td></tr>`;
+                document.getElementById("totalInfo").textContent = "-";
+            }
+        }
+
+        function renderPartners(items) {
+            const body = document.getElementById("partnersBody");
+            body.innerHTML = "";
+            if (!items || !items.length) {
+                body.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">' + (window.I18n?.t("partners.noData") || "Chưa có dữ liệu. Nhấn Thêm mới để tạo.") + '</td></tr>';
+                return;
+            }
+
+            const t = (k) => window.I18n?.t(k) || k;
+            const typeLabels = { C: t("partners.typeCustomer"), S: t("partners.typeSupplier") };
+            const typeBadges = { C: "badge-customer", S: "badge-supplier" };
+
+            items.forEach(p => {
+                const tr = document.createElement("tr");
+                tr.style.cursor = "pointer";
+                tr.addEventListener("click", () => { window.location.href = `/modules/Partners/detail.html?id=${p.id}`; });
+
+                tr.innerHTML = `
+                    <td><a href="/modules/Partners/detail.html?id=${p.id}" class="partner-link" onclick="event.stopPropagation()">${p.code || "-"}</a></td>
+                    <td class="fw-medium">${p.name || "-"}</td>
+                    <td><span class="badge ${typeBadges[p.type] || "badge-secondary"}">${typeLabels[p.type] || p.type}</span></td>
+                    <td class="info-cell">${p.taxCode || "-"}</td>
+                    <td class="info-cell">${p.representative || "-"}</td>
+                    <td class="info-cell">${p.phone || "-"}</td>
+                    <td class="info-cell">${p.email || "-"}</td>
+                    <td class="info-cell">${p.createdBy || "-"}</td>
+                    <td class="info-cell">${formatDate(p.createdAt)}</td>
+                    <td class="text-center" onclick="event.stopPropagation()">
+                        <button class="btn btn-sm btn-outline-primary me-1" data-i18n-attr="title:partners.edit" title="Sửa" onclick="location.href='/modules/Partners/detail.html?id=${p.id}'"><i class="bi bi-pencil"></i></button>
+                        <button class="btn btn-sm btn-outline-danger" data-i18n-attr="title:partners.delete" title="Xóa" onclick="deletePartner(${p.id}, event)"><i class="bi bi-trash"></i></button>
+                    </td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function renderPagination() {
+            const ul = document.getElementById("pagination");
+            ul.innerHTML = "";
+            if (totalPages <= 1) return;
+
+            const addLi = (content, disabled, onClick) => {
+                const li = document.createElement("li");
+                li.className = "page-item" + (disabled ? " disabled" : "");
+                const a = document.createElement("a");
+                a.className = "page-link";
+                a.href = "#";
+                a.innerHTML = content;
+                if (!disabled && onClick) a.addEventListener("click", (e) => { e.preventDefault(); onClick(); });
+                li.appendChild(a);
+                ul.appendChild(li);
+            };
+
+            addLi('<i class="bi bi-chevron-left"></i>', currentPage <= 1, () => { currentPage--; loadPartners(); });
+
+            const pages = [];
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) pages.push(i);
+                else if (pages[pages.length - 1] !== -1) pages.push(-1);
+            }
+            pages.forEach(p => {
+                if (p === -1) addLi("...", true);
+                else {
+                    const li = document.createElement("li");
+                    li.className = "page-item" + (p === currentPage ? " active" : "");
+                    const a = document.createElement("a");
+                    a.className = "page-link";
+                    a.href = "#";
+                    a.textContent = p;
+                    a.addEventListener("click", (e) => { e.preventDefault(); currentPage = p; loadPartners(); });
+                    li.appendChild(a);
+                    ul.appendChild(li);
+                }
+            });
+
+            addLi('<i class="bi bi-chevron-right"></i>', currentPage >= totalPages, () => { currentPage++; loadPartners(); });
+        }
+
+        async function deletePartner(id, ev) {
+            ev.stopPropagation();
+            if (!confirm(window.I18n?.t("partners.confirmDelete") || "Bạn có chắc muốn xóa bản ghi này?")) return;
+            try {
+                await fetchJson(`/api/partners/${id}`, { method: "DELETE" });
+                if (currentPage > 1 && currentPage > totalPages - 1) currentPage--;
+                loadPartners();
+            } catch (err) {
+                alert((window.I18n?.t("partners.deleteFailed") || "Xóa thất bại: ") + err.message);
+            }
+        }
+
+        document.getElementById("btnAdd").addEventListener("click", () => { window.location.href = "/modules/Partners/detail.html"; });
+        document.getElementById("searchInput").addEventListener("input", () => {
+            clearTimeout(window._searchT);
+            window._searchT = setTimeout(() => { currentPage = 1; loadPartners(); }, 500);
+        });
+        document.getElementById("limitSelect").addEventListener("change", () => { currentPage = 1; loadPartners(); });
+        document.querySelectorAll(".pill-filter button").forEach(btn => {
+            btn.addEventListener("click", () => {
+                document.querySelectorAll(".pill-filter button").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                currentPage = 1;
+                loadPartners();
+            });
+        });
+
+        loadPartners();
+
+        document.addEventListener("languageChanged", () => {
+            window.I18n?.updatePage();
+            document.getElementById("totalInfo").textContent = (window.I18n?.t("partners.totalRecords") || "Tổng: {{total}} bản ghi").replace("{{total}}", totalItems);
+            renderPartners(lastItems);
+        });
+    </script>
+</body>
+</html>

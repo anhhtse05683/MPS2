@@ -75,18 +75,18 @@
                     </div>
                 </div>
             </div>
-            <div class="col-12 col-xl-3">
+            <!-- <div class="col-12 col-xl-3">
                 <div class="form-section h-100">
                     <h6 class="mb-2" data-i18n="mps.quickNotes">Ghi chú nhanh</h6>
                     <ul class="mb-2 small">
-                        <li data-i18n="mps.note1">SHIP_QTY nhập tay; Pro_QTY lấy từ Production (ACTIVE/COMPLETE).</li>
+                        <li data-i18n="mps.note1">SHIP_QTY: quá khứ + tuần hiện tại có HĐ CONFIRM = từ Bán hàng (read-only); còn lại = forecast (nhập tay). Pro_QTY từ Production.</li>
                         <li data-i18n="mps.note2">Balance tuần khởi tạo giữ nguyên, tuần sau: prev - ship + pro.</li>
                         <li data-i18n="mps.note3">Stock_in lấy từ Purchase đã CONFIRM; Stock_out = Pro * BOM.</li>
                         <li data-i18n="mps.note4">Balance NVL: prev - stock_out + stock_in.</li>
                     </ul>
                     <span class="badge bg-warning text-dark" data-i18n="mps.note5">Tuần trước khởi tạo hiển thị 0</span>
                 </div>
-            </div>
+            </div> -->
         </div>
 
         <div class="form-section">
@@ -135,7 +135,9 @@
             materials: [],
             productOpening: null,
             materialOpenings: {}, // materialId -> {week, year, balance}
-            salesPlans: {}, // key -> qty
+            salesPlans: {}, // key -> qty (forecast từ SalesPlans)
+            salesActual: {}, // key -> qty (từ hóa đơn CONFIRM)
+            shipEditable: {}, // key -> boolean (true = cho nhập forecast)
             production: {}, // key -> qty for selected product
             purchase: {} // materialId -> { key -> qty }
         };
@@ -255,6 +257,45 @@
             return map;
         }
 
+        function mapSalesActual(records) {
+            const map = {};
+            records.forEach(r => {
+                map[weekKey(r.week, r.year)] = Number(r.qty || 0);
+            });
+            return map;
+        }
+
+        // Xác định SHIP_QTY và editable cho từng tuần: quá khứ + tuần hiện tại có CONFIRM = read-only
+        function buildShipQtyAndEditable(weeks, salesActual, salesPlans, currentWeek, currentYear) {
+            const ship = {};
+            const editable = {};
+            weeks.forEach(({ week, year }) => {
+                const key = weekKey(week, year);
+                const actual = Number(salesActual[key] || 0);
+                const forecast = Number(salesPlans[key] || 0);
+
+                const isPast = year < currentYear || (year === currentYear && week < currentWeek);
+                const isCurrent = year === currentYear && week === currentWeek;
+
+                if (isPast) {
+                    ship[key] = actual;
+                    editable[key] = false;
+                } else if (isCurrent) {
+                    if (actual > 0) {
+                        ship[key] = actual;
+                        editable[key] = false;
+                    } else {
+                        ship[key] = forecast;
+                        editable[key] = true;
+                    }
+                } else {
+                    ship[key] = forecast;
+                    editable[key] = true;
+                }
+            });
+            return { ship, editable };
+        }
+
         // ------------------ Calculations ------------------
         function calculateProductRows(productId, weeks, userShip, productionMap) {
             const opening = state.productOpening;
@@ -278,12 +319,37 @@
             }
 
             const allWeeks = generateWeeks(calcStartYear, calcStartWeek, lastWeek.year, lastWeek.week);
+            const currentWeek = getCurrentWeek();
+            const currentYear = new Date().getFullYear();
+
+            // Build ship for full range (allWeeks) - userShip chỉ có displayed weeks, cần ship từ opening đến tuần cuối
+            const fullShip = {};
+            allWeeks.forEach(w => {
+                const key = weekKey(w.week, w.year);
+                const actual = Number(state.salesActual[key] || 0);
+                const forecast = Number(state.salesPlans[key] || 0);
+                const isPast = w.year < currentYear || (w.year === currentYear && w.week < currentWeek);
+                const isCurrent = w.year === currentYear && w.week === currentWeek;
+                if (isPast) {
+                    fullShip[key] = actual;
+                } else if (isCurrent) {
+                    fullShip[key] = actual > 0 ? actual : forecast;
+                } else {
+                    fullShip[key] = forecast;
+                }
+            });
+            // Ưu tiên userShip cho displayed weeks (có thể user vừa edit trước khi state.salesPlans cập nhật)
+            weeks.forEach(({ week, year }) => {
+                const key = weekKey(week, year);
+                if (userShip[key] !== undefined) fullShip[key] = userShip[key];
+            });
+
             const balanceMap = {};
             let prevBalance = 0;
 
             allWeeks.forEach(w => {
                 const key = weekKey(w.week, w.year);
-                const shipQty = Number(userShip[key] || 0);
+                const shipQty = Number(fullShip[key] || 0);
                 const proQty = Number(productionMap[key] || 0);
 
                 if (opening && isSameWeek(w.week, w.year, opening)) {
@@ -299,7 +365,7 @@
             const rows = { ship: [], pro: [], balance: [] };
             weeks.forEach(({ week, year }) => {
                 const key = weekKey(week, year);
-                rows.ship.push(Number(userShip[key] || 0));
+                rows.ship.push(Number(fullShip[key] ?? userShip[key] ?? 0));
                 rows.pro.push(Number(productionMap[key] || 0));
                 rows.balance.push(balanceMap[key] ?? 0);
             });
@@ -427,17 +493,24 @@
                     const td = document.createElement("td");
                     td.className = "text-center week-col";
                     if (item.type === "input") {
-                        const input = document.createElement("input");
-                        input.type = "number";
-                        input.className = "form-control form-control-sm po-input";
-                        input.value = val;
-                        input.dataset.week = weeks[idx].week;
-                        input.dataset.year = weeks[idx].year;
-                        input.addEventListener("change", onShipQtyChange);
-                        td.appendChild(input);
+                        const key = weekKey(weeks[idx].week, weeks[idx].year);
+                        const canEdit = state.shipEditable[key];
+                        if (canEdit) {
+                            const input = document.createElement("input");
+                            input.type = "number";
+                            input.className = "form-control form-control-sm po-input";
+                            input.value = val;
+                            input.dataset.week = weeks[idx].week;
+                            input.dataset.year = weeks[idx].year;
+                            input.addEventListener("change", onShipQtyChange);
+                            td.appendChild(input);
+                        } else {
+                            td.textContent = formatNumber(val);
+                            td.classList.add("text-muted");
+                            td.title = "Từ hóa đơn bán hàng (không sửa được)";
+                        }
                     } else {
                         td.textContent = formatNumber(val);
-                        // Product: bôi đỏ khi balance < 0 (chưa quản lý tồn kho an toàn)
                         if (item.highlightNegative && val < 0) td.classList.add("text-negative");
                     }
                     tr.appendChild(td);
@@ -514,9 +587,10 @@
             const week = Number(e.target.dataset.week);
             const year = Number(e.target.dataset.year);
             const key = weekKey(week, year);
+            if (!state.shipEditable[key]) return;
             state.salesPlans[key] = Number(e.target.value || 0);
             pendingShipChanges[key] = state.salesPlans[key];
-            renderAll(); // re-render immediately
+            renderAll();
             scheduleSaveShipPlans();
         }
 
@@ -524,10 +598,12 @@
             if (saveShipTimer) clearTimeout(saveShipTimer);
             saveShipTimer = setTimeout(async () => {
                 const productId = Number(document.getElementById("productSelect").value);
-                const plans = Object.entries(pendingShipChanges).map(([k, qty]) => {
-                    const [yearStr, weekStr] = k.split("-W");
-                    return { year: Number(yearStr), week: Number(weekStr), qty: Number(qty || 0) };
-                });
+                const plans = Object.entries(pendingShipChanges)
+                    .filter(([k]) => state.shipEditable[k])
+                    .map(([k, qty]) => {
+                        const [yearStr, weekStr] = k.split("-W");
+                        return { year: Number(yearStr), week: Number(weekStr), qty: Number(qty || 0) };
+                    });
                 if (!plans.length) return;
                 try {
                     await fetchJson("/api/sales-plan", {
@@ -603,16 +679,18 @@
                 loadFromYear = startYear - 1;
             }
 
-            // materials + sales plan + production in parallel
-            const [materials, salesPlans, production] = await Promise.all([
+            // materials + sales plan + sales actual + production in parallel
+            const [materials, salesPlans, salesActual, production] = await Promise.all([
                 fetchJson(`/api/materials?productId=${productId}`),
                 fetchJson(`/api/sales-plan?productId=${productId}&fromYear=${loadFromYear}&fromWeek=${loadFromWeek}&toYear=${endYear}&toWeek=${endWeek}`),
+                fetchJson(`/api/sales-actual?productId=${productId}&fromYear=${loadFromYear}&fromWeek=${loadFromWeek}&toYear=${endYear}&toWeek=${endWeek}`),
                 fetchJson(`/api/production?productId=${productId}&fromYear=${loadFromYear}&fromWeek=${loadFromWeek}&toYear=${endYear}&toWeek=${endWeek}`)
             ]);
 
             state.materials = materials;
             state.productOpening = productOpening ? { week: productOpening.week, year: productOpening.year, balance: Number(productOpening.balance) } : null;
             state.salesPlans = mapSalesPlans(salesPlans || []);
+            state.salesActual = mapSalesActual(salesActual || []);
             state.production = mapProduction(production || []);
             console.log('[MPS] Production data loaded:', production);
             console.log('[MPS] Production map:', state.production);
@@ -682,6 +760,11 @@
             mpsSocket.on("purchase:changed", () => {
                 scheduleRealtimeReload();
             });
+
+            // Khi Sales thay đổi (hóa đơn CONFIRM ảnh hưởng SHIP_QTY), MPS cần cập nhật
+            mpsSocket.on("sales:changed", () => {
+                scheduleRealtimeReload();
+            });
         }
 
         // ------------------ Render orchestrator ------------------
@@ -695,10 +778,18 @@
             if (!product) return;
 
             const weeks = generateWeeks(startYear, startWeek, endYear, endWeek);
+            const currentWeek = getCurrentWeek();
+            const currentYear = new Date().getFullYear();
+
+            const { ship: mergedShip, editable: shipEditable } = buildShipQtyAndEditable(
+                weeks, state.salesActual, state.salesPlans, currentWeek, currentYear
+            );
+            state.shipEditable = shipEditable;
+
             renderHeaders(weeks, document.getElementById("productHeader"));
             renderHeaders(weeks, document.getElementById("materialHeader"));
 
-            const productRows = calculateProductRows(productId, weeks, state.salesPlans, state.production);
+            const productRows = calculateProductRows(productId, weeks, mergedShip, state.production);
             renderProductTable(product, weeks, productRows);
 
             const materialRows = calculateMaterialRows(productId, weeks, state.production);
