@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,14 +10,47 @@
     <script src="/modules/assets/js/auth.js"></script>
     <script src="/modules/assets/js/i18n.js"></script>
     <style>
-        body { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f8fafc 100%); min-height: 100vh; padding: 1.5rem; }
-        .card { border-radius: 20px; box-shadow: 0 20px 60px rgba(14, 165, 233, 0.12); border: none; margin-bottom: 1.5rem; }
-        .card-header-custom { background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: white; padding: 1.25rem 1.5rem; border-radius: 20px 20px 0 0; border: none; }
-        .card-header-custom h5 { margin: 0; font-weight: 600; }
-        .form-label { font-weight: 500; color: #334155; }
-        .meta-section { background: #f8fafc; border-radius: 12px; padding: 1rem; font-size: 0.875rem; color: #64748b; }
+        body {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f8fafc 100%);
+            min-height: 100vh;
+            padding: 1.5rem;
+        }
+
+        .card {
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(14, 165, 233, 0.12);
+            border: none;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-header-custom {
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+            color: white;
+            padding: 1.25rem 1.5rem;
+            border-radius: 20px 20px 0 0;
+            border: none;
+        }
+
+        .card-header-custom h5 {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .form-label {
+            font-weight: 500;
+            color: #334155;
+        }
+
+        .meta-section {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 1rem;
+            font-size: 0.875rem;
+            color: #64748b;
+        }
     </style>
 </head>
+
 <body>
     <div class="d-flex justify-content-between align-items-center mb-3">
         <a href="/modules/Partners/index.html" class="btn btn-outline-secondary btn-sm">
@@ -34,20 +68,26 @@
 
     <div class="card">
         <div class="card-header-custom">
-            <h5><i class="bi bi-person-badge me-2"></i><span data-i18n="partners.orderInfo">Thông tin Khách hàng / Nhà cung cấp</span></h5>
+            <h5><i class="bi bi-person-badge me-2"></i><span data-i18n="partners.orderInfo">Thông tin Khách hàng / Nhà
+                    cung cấp</span></h5>
         </div>
         <div class="card-body p-4">
             <div class="row g-3">
                 <div class="col-md-4">
-                    <label class="form-label"><span data-i18n="partners.form.code">Mã</span> <span class="text-danger">*</span></label>
-                    <input type="text" id="code" class="form-control" data-i18n="partners.form.codePlaceholder" placeholder="VD: CUST001, SUP001">
+                    <label class="form-label"><span data-i18n="partners.form.code">Mã</span> <span
+                            class="text-danger">*</span></label>
+                    <input type="text" id="code" class="form-control" data-i18n="partners.form.codePlaceholder"
+                        placeholder="VD: CUST001, SUP001">
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label"><span data-i18n="partners.form.name">Tên</span> <span class="text-danger">*</span></label>
-                    <input type="text" id="name" class="form-control" data-i18n="partners.form.namePlaceholder" placeholder="Tên đầy đủ">
+                    <label class="form-label"><span data-i18n="partners.form.name">Tên</span> <span
+                            class="text-danger">*</span></label>
+                    <input type="text" id="name" class="form-control" data-i18n="partners.form.namePlaceholder"
+                        placeholder="Tên đầy đủ">
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label"><span data-i18n="partners.form.type">Loại</span> <span class="text-danger">*</span></label>
+                    <label class="form-label"><span data-i18n="partners.form.type">Loại</span> <span
+                            class="text-danger">*</span></label>
                     <select id="type" class="form-select">
                         <option value="C" data-i18n="partners.typeCustomer">Khách hàng</option>
                         <option value="S" data-i18n="partners.typeSupplier">Nhà cung cấp</option>
@@ -55,32 +95,43 @@
                 </div>
                 <div class="col-md-4">
                     <label class="form-label" data-i18n="partners.form.taxCode">Mã số thuế</label>
-                    <input type="text" id="taxCode" class="form-control" data-i18n="partners.form.taxCodePlaceholder" placeholder="MST">
+                    <input type="text" id="taxCode" class="form-control" data-i18n="partners.form.taxCodePlaceholder"
+                        placeholder="MST">
                 </div>
                 <div class="col-md-4">
                     <label class="form-label" data-i18n="partners.form.representative">Người đại diện</label>
-                    <input type="text" id="representative" class="form-control" data-i18n="partners.form.representativePlaceholder" placeholder="Họ tên người đại diện">
+                    <input type="text" id="representative" class="form-control"
+                        data-i18n="partners.form.representativePlaceholder" placeholder="Họ tên người đại diện">
                 </div>
                 <div class="col-md-4">
                     <label class="form-label" data-i18n="partners.form.phone">Số điện thoại</label>
-                    <input type="text" id="phone" class="form-control" data-i18n="partners.form.phonePlaceholder" placeholder="SĐT">
+                    <input type="text" id="phone" class="form-control" data-i18n="partners.form.phonePlaceholder"
+                        placeholder="SĐT">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label" data-i18n="partners.form.email">Email</label>
-                    <input type="email" id="email" class="form-control" data-i18n="partners.form.emailPlaceholder" placeholder="email@example.com">
+                    <input type="email" id="email" class="form-control" data-i18n="partners.form.emailPlaceholder"
+                        placeholder="email@example.com">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label" data-i18n="partners.form.address">Địa chỉ</label>
-                    <input type="text" id="address" class="form-control" data-i18n="partners.form.addressPlaceholder" placeholder="Địa chỉ đầy đủ">
+                    <input type="text" id="address" class="form-control" data-i18n="partners.form.addressPlaceholder"
+                        placeholder="Địa chỉ đầy đủ">
                 </div>
             </div>
 
             <div id="metaSection" class="meta-section mt-4" style="display: none;">
                 <div class="row g-2 small">
-                    <div class="col-md-6"><strong data-i18n="partners.meta.createdBy">Người tạo:</strong> <span id="createdBy">-</span></div>
-                    <div class="col-md-6"><strong data-i18n="partners.meta.createdAt">Thời gian tạo:</strong> <span id="createdAt">-</span></div>
-                    <div class="col-md-6"><strong data-i18n="partners.meta.updatedBy">Người chỉnh sửa cuối:</strong> <span id="updatedBy">-</span></div>
-                    <div class="col-md-6"><strong data-i18n="partners.meta.updatedAt">Thời gian chỉnh sửa cuối:</strong> <span id="updatedAt">-</span></div>
+                    <div class="col-md-6"><strong data-i18n="partners.meta.createdBy">Người tạo:</strong> <span
+                            id="createdBy">-</span></div>
+                    <div class="col-md-6"><strong data-i18n="partners.meta.createdAt">Thời gian tạo:</strong> <span
+                            id="createdAt">-</span></div>
+                    <div class="col-md-6"><strong data-i18n="partners.meta.updatedBy">Người chỉnh sửa cuối:</strong>
+                        <span id="updatedBy">-</span>
+                    </div>
+                    <div class="col-md-6"><strong data-i18n="partners.meta.updatedAt">Thời gian chỉnh sửa cuối:</strong>
+                        <span id="updatedAt">-</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -140,6 +191,8 @@
                 return;
             }
 
+            const currentUser = window.Auth?.getUser?.();
+            const userDisplay = currentUser?.fullName || currentUser?.username || null;
             const payload = {
                 code,
                 name,
@@ -149,8 +202,8 @@
                 phone: document.getElementById("phone").value.trim() || null,
                 email: document.getElementById("email").value.trim() || null,
                 address: document.getElementById("address").value.trim() || null,
-                createdBy: "User",
-                updatedBy: "User"
+                createdBy: userDisplay,
+                updatedBy: userDisplay
             };
 
             try {
@@ -190,4 +243,5 @@
         });
     </script>
 </body>
+
 </html>

@@ -1873,12 +1873,20 @@ app.get("/api/users", auth.authMiddleware, auth.requirePermission("users.view"),
 });
 
 app.get("/api/users/list", auth.authMiddleware, async (req, res) => {
+  const deptId = parseIntSafe(req.query.deptId);
   try {
     const pool = await getPool();
-    const result = await pool.request().query(`
-      SELECT UserId AS id, Username AS username, FullName AS fullName
-      FROM Users WHERE IsActive = 1 ORDER BY FullName
-    `);
+    const request = pool.request();
+    let query = `
+      SELECT UserId AS id, Username AS username, FullName AS fullName, DeptId AS deptId
+      FROM Users WHERE IsActive = 1
+    `;
+    if (deptId) {
+      request.input("deptId", sql.Int, deptId);
+      query += " AND DeptId = @deptId";
+    }
+    query += " ORDER BY FullName";
+    const result = await request.query(query);
     res.json(result.recordset);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch users" });

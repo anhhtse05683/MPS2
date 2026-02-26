@@ -186,6 +186,21 @@
             color: #64748b;
             margin-left: 0.5rem;
         }
+
+        /* User searchable dropdown */
+        .user-select-wrapper { position: relative; }
+        .user-dropdown {
+            position: absolute; top: 100%; left: 0; right: 0;
+            background: white; border: 1px solid #ced4da; border-radius: 0.25rem;
+            max-height: 200px; overflow-y: auto; z-index: 9999; display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .user-dropdown.show { display: block; position: fixed; }
+        .user-option { padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid #f1f5f9; }
+        .user-option:hover { background: #f8fafc; }
+        .user-option.selected { background: #dcfce7; font-weight: 500; }
+        .user-option-name { font-weight: 600; color: #334155; }
+        .user-option-username { font-size: 0.8rem; color: #64748b; margin-left: 0.5rem; }
     </style>
 </head>
 
@@ -249,11 +264,16 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label" data-i18n="sales.form.createdBy">Người thao tác</label>
-                    <input type="text" id="createdBy" class="form-control" data-i18n="sales.form.createdByPlaceholder" placeholder="Nguyễn Văn A">
+                    <input type="text" id="createdBy" class="form-control" readonly
+                        data-i18n="sales.form.createdByPlaceholder" placeholder="Tự động theo tài khoản đăng nhập">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label" data-i18n="sales.form.assignedTo">Người phụ trách</label>
-                    <input type="text" id="assignedTo" class="form-control" data-i18n="sales.form.assignedToPlaceholder" placeholder="Trần Thị B">
+                    <div id="assignedToWrapper" class="user-select-wrapper" style="position:relative;">
+                        <input type="text" id="assignedTo" class="form-control user-search-input"
+                            data-i18n="sales.form.assignedToPlaceholder" placeholder="Tìm kiếm theo tên, username...">
+                        <div id="assignedToDropdown" class="user-dropdown"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -302,6 +322,7 @@
         let order = null;
         let lines = [];
         let products = [];
+        let users = [];
 
         // Get order ID from URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -348,6 +369,20 @@
             } catch (err) {
                 console.error("Failed to load products:", err);
                 products = [];
+            }
+        }
+
+        // Load users (filter by same department as current user; fallback to all if empty)
+        async function loadUsers() {
+            try {
+                const currentUser = window.Auth?.getUser?.();
+                const deptId = currentUser?.deptId || null;
+                let url = deptId ? `/api/users/list?deptId=${deptId}` : "/api/users/list";
+                users = await fetchJson(url);
+                if (users.length === 0 && deptId) users = await fetchJson("/api/users/list");
+            } catch (err) {
+                console.error("Failed to load users:", err);
+                users = [];
             }
         }
 
@@ -404,8 +439,69 @@
             document.getElementById("deliveryDate").value = order.DeliveryDate ? order.DeliveryDate.split("T")[0] : "";
             document.getElementById("status").value = order.Status || "INITIAL";
             document.getElementById("currency").value = order.Currency || "VND";
-            document.getElementById("createdBy").value = order.CreatedBy || "";
+            const currentUser = window.Auth?.getUser?.();
+            const userDisplay = currentUser?.fullName || currentUser?.username || "";
+            document.getElementById("createdBy").value = orderId ? (order.CreatedBy || "") : userDisplay;
             document.getElementById("assignedTo").value = order.AssignedTo || "";
+            setupAssignedToDropdown();
+        }
+
+        function setupAssignedToDropdown() {
+            const input = document.getElementById("assignedTo");
+            const dropdown = document.getElementById("assignedToDropdown");
+            const wrapper = document.getElementById("assignedToWrapper");
+
+            function renderOptions(searchTerm = "") {
+                dropdown.innerHTML = "";
+                const term = searchTerm.toLowerCase().trim();
+                const filtered = users.filter(u =>
+                    !term ||
+                    (u.fullName && u.fullName.toLowerCase().includes(term)) ||
+                    (u.username && u.username.toLowerCase().includes(term))
+                );
+                if (filtered.length === 0) {
+                    const noResult = document.createElement("div");
+                    noResult.className = "user-option";
+                    noResult.textContent = "Không tìm thấy";
+                    noResult.style.cursor = "default";
+                    dropdown.appendChild(noResult);
+                } else {
+                    filtered.forEach(u => {
+                        const opt = document.createElement("div");
+                        opt.className = "user-option";
+                        const display = u.fullName || u.username || "";
+                        if (input.value === display) opt.classList.add("selected");
+                        opt.innerHTML = `<span class="user-option-name">${display}</span><span class="user-option-username">${u.username || ""}</span>`;
+                        opt.onclick = () => {
+                            input.value = display;
+                            dropdown.classList.remove("show");
+                        };
+                        dropdown.appendChild(opt);
+                    });
+                }
+            }
+
+            function positionDropdown() {
+                if (!dropdown.classList.contains("show")) return;
+                const rect = input.getBoundingClientRect();
+                dropdown.style.top = rect.bottom + "px";
+                dropdown.style.left = rect.left + "px";
+                dropdown.style.width = rect.width + "px";
+            }
+
+            function showDropdown() {
+                dropdown.classList.add("show");
+                renderOptions(input.value);
+                requestAnimationFrame(positionDropdown);
+            }
+
+            input.onfocus = showDropdown;
+            input.onclick = showDropdown;
+            input.oninput = () => renderOptions(input.value);
+            document.addEventListener("click", (e) => {
+                if (!wrapper.contains(e.target)) dropdown.classList.remove("show");
+            });
+            window.addEventListener("scroll", () => { if (dropdown.classList.contains("show")) positionDropdown(); }, true);
         }
 
         // Render lines
@@ -681,7 +777,12 @@
                 deliveryDate: document.getElementById("deliveryDate").value || null,
                 status: "INITIAL",
                 currency: document.getElementById("currency").value,
-                createdBy: document.getElementById("createdBy").value.trim() || null,
+                createdBy: (() => {
+                    const v = document.getElementById("createdBy").value.trim();
+                    if (v) return v;
+                    const u = window.Auth?.getUser?.();
+                    return u?.fullName || u?.username || null;
+                })(),
                 assignedTo: document.getElementById("assignedTo").value.trim() || null,
                 lines: lines.map(line => ({
                     productId: parseInt(line.productId),
@@ -746,7 +847,12 @@
                 deliveryDate: document.getElementById("deliveryDate").value || null,
                 status: document.getElementById("status").value,
                 currency: document.getElementById("currency").value,
-                createdBy: document.getElementById("createdBy").value.trim() || null,
+                createdBy: (() => {
+                    const v = document.getElementById("createdBy").value.trim();
+                    if (v) return v;
+                    const u = window.Auth?.getUser?.();
+                    return u?.fullName || u?.username || null;
+                })(),
                 assignedTo: document.getElementById("assignedTo").value.trim() || null,
                 lines: lines.map(line => ({
                     productId: parseInt(line.productId),
@@ -795,7 +901,7 @@
         });
 
         // Initialize
-        loadProducts().then(() => {
+        Promise.all([loadProducts(), loadUsers()]).then(() => {
             loadOrder();
         });
 
