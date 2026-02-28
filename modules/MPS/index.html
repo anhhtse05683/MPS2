@@ -111,7 +111,7 @@
         <div class="form-section">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                 <h5 class="mb-0" data-i18n="mps.materialTable">Material Table</h5>
-                <div class="small text-muted" data-i18n="mps.materialTableDesc">Tính theo BOM và phiếu mua CONFIRM</div>
+                <div class="small text-muted" data-i18n="mps.materialTableDesc">Tính theo BOM; Stock_In quá khứ = phiếu nhập đã xác nhận, tương lai = phiếu mua đặt hàng</div>
             </div>
             <div id="materialTableWrapper" class="table-responsive table-sticky">
                 <table class="table table-bordered align-middle">
@@ -228,7 +228,7 @@
         }
 
         function formatNumber(value) {
-            return Number(value || 0).toLocaleString("vi-VN", { minimumFractionDigits: 0 });
+            return Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 0 });
         }
 
         // ------------------ Data mapping ------------------
@@ -665,19 +665,19 @@
             // Cần biết opening của sản phẩm trước để quyết định range load dữ liệu
             const productOpening = await fetchJson(`/api/opening-balance/product/${productId}`);
 
-            // Load từ tuần opening (nếu có) để đủ dữ liệu tính balance xuyên nhiều tuần
-            // Nếu không có opening: lùi 1 tuần trước range để giảm thiếu hụt
+            // Load từ tuần sớm nhất: opening HOẶC 1 tuần trước view start (để bao gồm tuần quá khứ)
             let loadFromWeek;
             let loadFromYear;
+            const viewStartWeek = startWeek > 1 ? startWeek - 1 : 52;
+            const viewStartYear = startWeek > 1 ? startYear : startYear - 1;
             if (productOpening) {
-                loadFromWeek = productOpening.week;
-                loadFromYear = productOpening.year;
-            } else if (startWeek > 1) {
-                loadFromWeek = startWeek - 1;
-                loadFromYear = startYear;
+                const ow = productOpening.week, oy = productOpening.year;
+                const viewEarlier = (oy < viewStartYear) || (oy === viewStartYear && ow <= viewStartWeek);
+                loadFromWeek = viewEarlier ? ow : viewStartWeek;
+                loadFromYear = viewEarlier ? oy : viewStartYear;
             } else {
-                loadFromWeek = 52;
-                loadFromYear = startYear - 1;
+                loadFromWeek = viewStartWeek;
+                loadFromYear = viewStartYear;
             }
 
             // materials + sales plan + sales actual + production in parallel
@@ -706,10 +706,10 @@
             );
             state.materialOpenings = openings;
 
-            // purchase for range (all materials) then filter
-            // Load thêm 1 tuần trước range để có đủ dữ liệu tính balance
+            // purchase for range (all materials)
             const purchase = await fetchJson(`/api/purchase?fromYear=${loadFromYear}&fromWeek=${loadFromWeek}&toYear=${endYear}&toWeek=${endWeek}`);
             state.purchase = mapPurchase(purchase || []);
+            console.log('[MPS] Purchase/stock_in data:', purchase, '-> map:', state.purchase);
 
             updateOpeningInputs();
         }

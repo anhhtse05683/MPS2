@@ -200,7 +200,7 @@
         }
 
         function formatNumber(value) {
-            return Number(value || 0).toLocaleString("vi-VN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+            return Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
         }
 
         function formatStatusBadge(status) {
@@ -373,9 +373,16 @@
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)
                 });
-                if (!res.ok) throw new Error(await res.text());
+                const text = await res.text();
+                if (!res.ok) throw new Error(text);
+                let data = {};
+                try { data = JSON.parse(text); } catch (_) {}
                 bootstrap.Modal.getOrCreateInstance(document.getElementById("orderModal")).hide();
                 await loadOrders();
+                if (data.stockWarning) {
+                    console.warn("[Production] Stock warning:", data.stockWarning);
+                    alert("Đã cập nhật trạng thái nhưng không tạo được phiếu nhập/xuất kho:\n" + data.stockWarning + "\n\nVui lòng chạy fix_inventory.sql nếu chưa có bảng StockTransactions, StockBalances.");
+                }
             } catch (err) {
                 console.error(err);
                 alert("Lưu đơn sản xuất thất bại.");

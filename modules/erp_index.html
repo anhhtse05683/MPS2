@@ -56,6 +56,33 @@
                     <i class="bi bi-diagram-3"></i>
                     <span data-i18n="erp.mrp">MRP - Hoạch định</span>
                 </a>
+                <div class="menu-item menu-submenu-toggle" data-submenu="bom" role="button" tabindex="0">
+                    <i class="bi bi-list-nested"></i>
+                    <span data-i18n="erp.bom">BOM</span>
+                    <span class="icon-nav-arrow"><i class="bi bi-chevron-down"></i></span>
+                </div>
+                <ul class="menu-submenu" id="submenu-bom">
+                    <li>
+                        <a href="#bom-design" class="menu-item menu-sub-item enabled" data-src="/modules/BOM/design.html">
+                            <i class="bi bi-pencil-square"></i>
+                            <span data-i18n="erp.bomDesign">Thiết kế BOM</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="menu-item menu-sub-item disabled" title="Phát triển sau" onclick="return false;">
+                            <i class="bi bi-bar-chart"></i>
+                            <span data-i18n="erp.bomQuota">Tình hình định mức BOM</span>
+                            <span class="badge bg-secondary">Sau</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="menu-item menu-sub-item disabled" title="Phát triển sau" onclick="return false;">
+                            <i class="bi bi-star"></i>
+                            <span data-i18n="erp.bomEval">Đánh giá BOM</span>
+                            <span class="badge bg-secondary">Sau</span>
+                        </a>
+                    </li>
+                </ul>
                 <a href="#quality" class="menu-item">
                     <i class="bi bi-shield-check"></i>
                     <span data-i18n="erp.quality">Quản lý chất lượng</span>
@@ -74,11 +101,11 @@
             </div>
             <div class="menu-section">
                 <div class="menu-section-title" data-i18n="erp.inventory">Quản lý kho</div>
-                <a href="#inventory" class="menu-item">
+                <a href="#inventory" class="menu-item enabled" data-src="/modules/Inventory/index.html">
                     <i class="bi bi-boxes"></i>
                     <span data-i18n="erp.stock">Tồn kho</span>
                 </a>
-                <a href="#warehouse" class="menu-item">
+                <a href="#warehouse" class="menu-item enabled" data-src="/modules/Inventory/warehouses.html">
                     <i class="bi bi-building"></i>
                     <span data-i18n="erp.warehouse">Kho hàng</span>
                 </a>
@@ -102,13 +129,13 @@
                     <span data-i18n="erp.orders">Đơn hàng</span>
                     <span class="badge">12</span>
                 </a> -->
-                <a href="#mps" class="menu-item" data-src="/modules/MPS/po.html">
+                <!-- <a href="#mps" class="menu-item" data-src="/modules/MPS/po.html">
                     <i class="bi bi-diagram-3"></i>
                     <span data-i18n="erp.orders">Đơn hàng</span>
                     <span class="badge">12</span>
-                </a>
+                </a> -->
             </div>
-            <div class="menu-section">
+            <!-- <div class="menu-section">
                 <div class="menu-section-title" data-i18n="erp.finance">Tài chính</div>
                 <a href="#accounting" class="menu-item">
                     <i class="bi bi-calculator"></i>
@@ -122,7 +149,7 @@
                     <i class="bi bi-pie-chart"></i>
                     <span data-i18n="erp.budget">Ngân sách</span>
                 </a>
-            </div>
+            </div> -->
             <div class="menu-section">
                 <div class="menu-section-title" data-i18n="erp.reports">Báo cáo</div>
                 <a href="#reports" class="menu-item">
@@ -513,10 +540,30 @@
             if (match) match.classList.add('active');
         }
 
+        // Submenu toggle (BOM)
+        document.querySelectorAll('.menu-submenu-toggle').forEach(toggle => {
+            toggle.addEventListener('click', (e) => {
+                const id = toggle.dataset.submenu;
+                const sub = document.getElementById('submenu-' + id);
+                if (sub) {
+                    sub.classList.toggle('expanded');
+                    toggle.classList.toggle('expanded');
+                }
+            });
+            toggle.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggle.click();
+                }
+            });
+        });
+
         // Menu item active state & module loading
-        const menuItems = document.querySelectorAll('.menu-item');
+        const menuItems = document.querySelectorAll('.menu-item:not(.menu-submenu-toggle)');
         menuItems.forEach(item => {
             item.addEventListener('click', (e) => {
+                if (item.classList.contains('menu-submenu-toggle')) return;
+                if (item.classList.contains('disabled')) { e.preventDefault(); return; }
                 const href = item.getAttribute('href') || '';
                 const src = item.getAttribute('data-src') || '';
 
@@ -525,6 +572,12 @@
                     e.preventDefault();
                     menuItems.forEach(i => i.classList.remove('active'));
                     item.classList.add('active');
+                    if (item.classList.contains('menu-sub-item')) {
+                        const sub = item.closest('.menu-submenu');
+                        const toggle = sub ? document.querySelector('.menu-submenu-toggle[data-submenu="' + (sub.id || '').replace('submenu-', '') + '"]') : null;
+                        if (sub) sub.classList.add('expanded');
+                        if (toggle) toggle.classList.add('expanded');
+                    }
                     loadModule(src, { pushState: true });
                     return;
                 }
@@ -557,6 +610,12 @@
             if (src) {
                 loadModule(src, { pushState: false });
                 setActiveMenuBySrc(src);
+                if (src.includes('BOM') || src.includes('bom')) {
+                    const sub = document.getElementById('submenu-bom');
+                    const toggle = document.querySelector('.menu-submenu-toggle[data-submenu="bom"]');
+                    if (sub) sub.classList.add('expanded');
+                    if (toggle) toggle.classList.add('expanded');
+                }
                 return true;
             }
             return false;

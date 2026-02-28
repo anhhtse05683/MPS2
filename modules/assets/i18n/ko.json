@@ -264,6 +264,7 @@
       "quantity": "수량",
       "unitPrice": "단가",
       "lineTotal": "행 합계",
+      "etaDate": "ETA 일자",
       "etaYear": "ETA 연도",
       "etaWeek": "ETA 주"
     },
@@ -309,7 +310,7 @@
       "selectMaterial": "행 {{line}}: 자재를 선택하세요",
       "invalidMaterial": "행 {{line}}: 잘못된 자재",
       "quantityRequired": "행 {{line}}: 수량 > 0을 입력하세요",
-      "etaRequired": "행 {{line}}: ETA 연도 및 주를 입력하세요"
+      "etaRequired": "행 {{line}}: ETA 일자(예상 입고일)를 선택하세요"
     },
     "updateSuccess": "업데이트 성공!",
     "createSuccess": "생성 성공!",

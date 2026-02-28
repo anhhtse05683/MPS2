@@ -48,6 +48,17 @@ app.use("/api", (req, res, next) => {
 const parseIntSafe = (v) =>
   v === undefined || v === null || v === "" ? null : parseInt(v, 10);
 
+/** Chuyển giá trị ngày từ DB (Date object hoặc string) sang YYYY-MM-DD. Tránh lỗi String(date).slice(0,10) cho "Fri Feb 27". */
+const toDateString = (val) => {
+  if (!val) return null;
+  if (val instanceof Date) {
+    return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, "0")}-${String(val.getDate()).padStart(2, "0")}`;
+  }
+  const s = String(val);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  return null;
+};
+
 // -------- Auth (public) ----------
 app.post("/api/auth/login", async (req, res) => {
   const { username, password } = req.body || {};
@@ -237,6 +248,329 @@ app.get("/api/materials", auth.requirePermission("product.view"), async (req, re
   }
 });
 
+// -------- BOM (Thiết kế BOM) - list products, BOM chi tiết, CRUD ----------
+app.get("/api/bom/products", auth.requirePermission("product.view"), async (req, res) => {
+  const page = Math.max(1, parseIntSafe(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, parseIntSafe(req.query.limit) || 20));
+  const search = (req.query.search || req.query.q || "").trim();
+  const offset = (page - 1) * limit;
+  try {
+    const pool = await getPool();
+    const countReq = pool.request();
+    if (search) countReq.input("like", sql.NVarChar, `%${search}%`);
+    const countResult = await countReq.query(`
+      SELECT COUNT(*) AS total FROM Products p
+      WHERE ${search ? "(p.ProductCode LIKE @like OR p.ProductName LIKE @like)" : "1=1"}
+    `);
+    const total = countResult.recordset[0]?.total || 0;
+    const dataReq = pool.request().input("limit", sql.Int, limit).input("offset", sql.Int, offset);
+    if (search) dataReq.input("like", sql.NVarChar, `%${search}%`);
+    const dataResult = await dataReq.query(`
+      SELECT p.ProductId AS id, p.ProductCode AS code, p.ProductName AS name, p.ImageUrl AS imageUrl
+      FROM Products p
+      WHERE ${search ? "(p.ProductCode LIKE @like OR p.ProductName LIKE @like)" : "1=1"}
+      ORDER BY p.ProductCode
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    `);
+    res.json({ data: dataResult.recordset, total, page, limit, totalPages: Math.ceil(total / limit) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
+});
+
+app.get("/api/bom/product/:productId", auth.requirePermission("product.view"), async (req, res) => {
+  const productId = parseIntSafe(req.params.productId);
+  if (!productId) return res.status(400).json({ error: "Invalid productId" });
+  try {
+    const pool = await getPool();
+    const header = await pool.request().input("productId", sql.Int, productId).query(`
+      SELECT p.ProductId AS id, p.ProductCode AS code, p.ProductName AS name, p.ImageUrl AS imageUrl
+      FROM Products p WHERE p.ProductId = @productId
+    `);
+    if (!header.recordset.length) return res.status(404).json({ error: "Product not found" });
+    const product = header.recordset[0];
+    let lines;
+    try {
+      lines = await pool.request().input("productId", sql.Int, productId).query(`
+        SELECT b.BomLineId AS id, b.MaterialId, b.ConsumePerUnit AS consumePerUnit,
+               m.MaterialCode AS code, m.MaterialName AS name, ISNULL(m.Unit, 'PCS') AS unit
+        FROM BomLines b
+        JOIN Materials m ON m.MaterialId = b.MaterialId
+        WHERE b.ProductId = @productId
+        ORDER BY m.MaterialCode
+      `);
+    } catch (unitErr) {
+      if (unitErr.message && /Invalid column name 'Unit'/i.test(unitErr.message)) {
+        lines = await pool.request().input("productId", sql.Int, productId).query(`
+          SELECT b.BomLineId AS id, b.MaterialId, b.ConsumePerUnit AS consumePerUnit,
+                 m.MaterialCode AS code, m.MaterialName AS name, 'PCS' AS unit
+          FROM BomLines b
+          JOIN Materials m ON m.MaterialId = b.MaterialId
+          WHERE b.ProductId = @productId
+          ORDER BY m.MaterialCode
+        `);
+      } else throw unitErr;
+    }
+    let audit = { recordset: [{ createdAt: null, updatedAt: null, createdBy: null, updatedBy: null }] };
+    try {
+      audit = await pool.request().input("productId", sql.Int, productId).query(`
+        SELECT MIN(b.CreatedAt) AS createdAt, MAX(b.UpdatedAt) AS updatedAt,
+               (SELECT TOP 1 CreatedBy FROM BomLines WHERE ProductId = @productId ORDER BY CreatedAt ASC) AS createdBy,
+               (SELECT TOP 1 UpdatedBy FROM BomLines WHERE ProductId = @productId ORDER BY UpdatedAt DESC) AS updatedBy
+        FROM BomLines b WHERE b.ProductId = @productId
+      `);
+    } catch (_) {
+      try {
+        audit = await pool.request().input("productId", sql.Int, productId).query(`
+          SELECT MIN(b.CreatedAt) AS createdAt, MAX(b.UpdatedAt) AS updatedAt FROM BomLines b WHERE b.ProductId = @productId
+        `);
+        if (audit.recordset[0]) audit.recordset[0].createdBy = audit.recordset[0].updatedBy = null;
+      } catch (__) {}
+    }
+    product.lines = lines.recordset || [];
+    product.audit = audit.recordset[0] || { createdAt: null, updatedAt: null, createdBy: null, updatedBy: null };
+    res.json(product);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch BOM detail" });
+  }
+});
+
+app.get("/api/bom", auth.requirePermission("product.view"), async (req, res) => {
+  const page = Math.max(1, parseIntSafe(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, parseIntSafe(req.query.limit) || 20));
+  const search = (req.query.search || req.query.q || "").trim();
+  const offset = (page - 1) * limit;
+  try {
+    const pool = await getPool();
+    const countReq = pool.request();
+    if (search) countReq.input("like", sql.NVarChar, `%${search}%`);
+    const countResult = await countReq.query(`
+      SELECT COUNT(DISTINCT b.ProductId) AS total FROM BomLines b
+      JOIN Products p ON p.ProductId = b.ProductId
+      JOIN Materials m ON m.MaterialId = b.MaterialId
+      WHERE ${search ? "(p.ProductCode LIKE @like OR p.ProductName LIKE @like OR m.MaterialCode LIKE @like OR m.MaterialName LIKE @like)" : "1=1"}
+    `);
+    const total = countResult.recordset[0]?.total || 0;
+    const dataRequest = pool.request().input("limit", sql.Int, limit).input("offset", sql.Int, offset);
+    if (search) dataRequest.input("like", sql.NVarChar, `%${search}%`);
+    const dataResult = await dataRequest.query(`
+      SELECT b.BomLineId AS id, b.ProductId, b.MaterialId, b.ConsumePerUnit AS consumePerUnit,
+             p.ProductCode, p.ProductName, m.MaterialCode, m.MaterialName
+      FROM BomLines b
+      JOIN Products p ON p.ProductId = b.ProductId
+      JOIN Materials m ON m.MaterialId = b.MaterialId
+      WHERE ${search ? "(p.ProductCode LIKE @like OR p.ProductName LIKE @like OR m.MaterialCode LIKE @like OR m.MaterialName LIKE @like)" : "1=1"}
+      ORDER BY p.ProductCode, m.MaterialCode
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    `);
+    res.json({ data: dataResult.recordset, total, page, limit, totalPages: Math.ceil(total / limit) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch BOM" });
+  }
+});
+
+app.post("/api/bom", auth.requirePermission("product.edit"), async (req, res) => {
+  const { productId, materialId, consumePerUnit } = req.body || {};
+  if (!productId || !materialId)
+    return res.status(400).json({ error: "productId and materialId are required" });
+  const consume = parseFloat(consumePerUnit) || 1;
+  if (consume <= 0) return res.status(400).json({ error: "consumePerUnit must be > 0" });
+  const createdBy = req.user?.fullName || req.user?.username || null;
+  try {
+    const pool = await getPool();
+    let result;
+    try {
+      result = await pool.request()
+        .input("productId", sql.Int, productId)
+        .input("materialId", sql.Int, materialId)
+        .input("consumePerUnit", sql.Decimal(18, 3), consume)
+        .input("createdBy", sql.NVarChar, createdBy)
+        .query(`INSERT INTO BomLines (ProductId, MaterialId, ConsumePerUnit, CreatedBy) OUTPUT INSERTED.BomLineId AS id VALUES (@productId, @materialId, @consumePerUnit, @createdBy)`);
+    } catch (colErr) {
+      if (colErr.message && /Invalid column name 'CreatedBy'/i.test(colErr.message)) {
+        result = await pool.request()
+          .input("productId", sql.Int, productId)
+          .input("materialId", sql.Int, materialId)
+          .input("consumePerUnit", sql.Decimal(18, 3), consume)
+          .query(`INSERT INTO BomLines (ProductId, MaterialId, ConsumePerUnit) OUTPUT INSERTED.BomLineId AS id VALUES (@productId, @materialId, @consumePerUnit)`);
+      } else throw colErr;
+    }
+    res.status(201).json({ id: result.recordset[0].id });
+  } catch (err) {
+    if (err.message && /UNIQUE|duplicate|Violation of UNIQUE/i.test(err.message))
+      return res.status(400).json({ error: "Định mức này đã tồn tại (trùng sản phẩm + NVL)" });
+    console.error(err);
+    res.status(500).json({ error: "Failed to create BOM" });
+  }
+});
+
+app.put("/api/bom/:id", auth.requirePermission("product.edit"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  const { productId, materialId, consumePerUnit } = req.body || {};
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  const consume = consumePerUnit !== undefined ? parseFloat(consumePerUnit) : null;
+  if (consume !== null && consume <= 0) return res.status(400).json({ error: "consumePerUnit must be > 0" });
+  try {
+    const pool = await getPool();
+    const request = pool.request().input("id", sql.Int, id);
+    const updates = [];
+    if (productId !== undefined) { request.input("productId", sql.Int, productId); updates.push("ProductId = @productId"); }
+    if (materialId !== undefined) { request.input("materialId", sql.Int, materialId); updates.push("MaterialId = @materialId"); }
+    if (consume !== null) { request.input("consumePerUnit", sql.Decimal(18, 3), consume); updates.push("ConsumePerUnit = @consumePerUnit"); }
+    if (!updates.length) return res.status(400).json({ error: "No fields to update" });
+    updates.push("UpdatedAt = SYSDATETIME()");
+    const updatedBy = req.user?.fullName || req.user?.username || null;
+    request.input("updatedBy", sql.NVarChar, updatedBy);
+    updates.push("UpdatedBy = @updatedBy");
+    await request.query(`UPDATE BomLines SET ${updates.join(", ")} WHERE BomLineId = @id`);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.message && /UNIQUE|duplicate|Violation of UNIQUE/i.test(err.message))
+      return res.status(400).json({ error: "Định mức này đã tồn tại (trùng sản phẩm + NVL)" });
+    console.error(err);
+    res.status(500).json({ error: "Failed to update BOM" });
+  }
+});
+
+app.delete("/api/bom/:id", auth.requirePermission("product.edit"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    await pool.request().input("id", sql.Int, id).query(`DELETE FROM BomLines WHERE BomLineId = @id`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to delete BOM" });
+  }
+});
+
+app.post("/api/bom/delete-batch", auth.requirePermission("product.edit"), async (req, res) => {
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "ids array is required" });
+  const validIds = ids.map(id => parseInt(id, 10)).filter(id => id > 0);
+  if (!validIds.length) return res.status(400).json({ error: "No valid ids" });
+  try {
+    const pool = await getPool();
+    for (const id of validIds) {
+      await pool.request().input("id", sql.Int, id).query(`DELETE FROM BomLines WHERE BomLineId = @id`);
+    }
+    res.json({ ok: true, deleted: validIds.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to delete BOM lines" });
+  }
+});
+
+app.get("/api/bom/export", auth.requirePermission("product.view"), async (req, res) => {
+  const search = (req.query.search || req.query.q || "").trim();
+  try {
+    const pool = await getPool();
+    const dataReq = pool.request();
+    if (search) dataReq.input("like", sql.NVarChar, `%${search}%`);
+    const rows = await dataReq.query(`
+      SELECT TOP 5000 p.ProductCode, p.ProductName, m.MaterialCode, m.MaterialName, b.ConsumePerUnit
+      FROM Products p
+      LEFT JOIN BomLines b ON b.ProductId = p.ProductId
+      LEFT JOIN Materials m ON m.MaterialId = b.MaterialId
+      WHERE ${search ? "(p.ProductCode LIKE @like OR p.ProductName LIKE @like)" : "1=1"}
+      ORDER BY p.ProductCode, m.MaterialCode
+    `);
+    const data = (rows.recordset || []).map(r => ({
+      "Mã thành phẩm": r.ProductCode || "",
+      "Tên thành phẩm": r.ProductName || "",
+      "Mã NVL": r.MaterialCode || "",
+      "Tên NVL": r.MaterialName || "",
+      "Số lượng tiêu hao": r.ConsumePerUnit ?? "",
+    }));
+    const wb = xlsx.utils.book_new();
+    const ws = xlsx.utils.json_to_sheet(data);
+    xlsx.utils.book_append_sheet(wb, ws, "BOM");
+    const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
+    res.setHeader("Content-Disposition", "attachment; filename=bom-export.xlsx");
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buf);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to export BOM" });
+  }
+});
+
+app.get("/api/bom/template", auth.requirePermission("product.view"), async (_req, res) => {
+  try {
+    const data = [
+      { "Mã thành phẩm": "SP001", "Mã NVL": "NVL001", "Số lượng tiêu hao": 1 },
+      { "Mã thành phẩm": "SP001", "Mã NVL": "NVL002", "Số lượng tiêu hao": 2.5 },
+    ];
+    const wb = xlsx.utils.book_new();
+    const ws = xlsx.utils.json_to_sheet(data);
+    xlsx.utils.book_append_sheet(wb, ws, "BOM");
+    const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
+    res.setHeader("Content-Disposition", "attachment; filename=bom-mau.xlsx");
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buf);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to download template" });
+  }
+});
+
+app.post("/api/bom/import-paste", auth.requirePermission("product.edit"), async (req, res) => {
+  const { text } = req.body || {};
+  if (!text || typeof text !== "string") return res.status(400).json({ error: "text is required" });
+  const lines = text.trim().split(/\r?\n/).filter(Boolean);
+  if (!lines.length) return res.status(400).json({ error: "No data" });
+  const sep = /\t/.test(lines[0]) ? "\t" : ",";
+  const headers = lines[0].split(sep).map(h => h.trim());
+  const codeProductIdx = headers.findIndex(h => /mã thành phẩm|productcode|product_code|ma thanh pham/i.test(h));
+  const codeMaterialIdx = headers.findIndex(h => /mã nvl|materialcode|material_code|ma nvl/i.test(h));
+  const consumeIdx = headers.findIndex(h => /số lượng tiêu hao|consume|consumeperunit|so luong tieu hao|định mức/i.test(h));
+  if (codeProductIdx < 0 || codeMaterialIdx < 0 || consumeIdx < 0) {
+    return res.status(400).json({ error: "Cần các cột: Mã thành phẩm, Mã NVL, Số lượng tiêu hao" });
+  }
+  const rows = lines.slice(1).map(line => {
+    const cells = line.split(sep).map(c => c.trim());
+    return {
+      productCode: (cells[codeProductIdx] || "").trim(),
+      materialCode: (cells[codeMaterialIdx] || "").trim(),
+      consume: parseFloat(cells[consumeIdx]) || 0,
+    };
+  }).filter(r => r.productCode && r.materialCode && r.consume > 0);
+  if (!rows.length) return res.status(400).json({ error: "Không có dòng dữ liệu hợp lệ" });
+  try {
+    const pool = await getPool();
+    const productMap = {};
+    const materialMap = {};
+    const prodRes = await pool.request().query("SELECT ProductId, ProductCode FROM Products");
+    (prodRes.recordset || []).forEach(p => { productMap[(p.ProductCode || "").toUpperCase()] = p.ProductId; });
+    const matRes = await pool.request().query("SELECT MaterialId, MaterialCode FROM Materials");
+    (matRes.recordset || []).forEach(m => { materialMap[(m.MaterialCode || "").toUpperCase()] = m.MaterialId; });
+    let inserted = 0, skipped = 0;
+    for (const r of rows) {
+      const productId = productMap[(r.productCode || "").toUpperCase()];
+      const materialId = materialMap[(r.materialCode || "").toUpperCase()];
+      if (!productId || !materialId) { skipped++; continue; }
+      try {
+        await pool.request()
+          .input("productId", sql.Int, productId)
+          .input("materialId", sql.Int, materialId)
+          .input("consume", sql.Decimal(18, 3), r.consume)
+          .query(`INSERT INTO BomLines (ProductId, MaterialId, ConsumePerUnit) VALUES (@productId, @materialId, @consume)`);
+        inserted++;
+      } catch (e) {
+        if (!/UNIQUE|duplicate/i.test(e.message || "")) throw e;
+        skipped++;
+      }
+    }
+    res.json({ ok: true, inserted, skipped });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to import" });
+  }
+});
+
 // -------- Opening balance (get) ----------
 app.get("/api/opening-balance/:type/:id", auth.requirePermission("product.view"), async (req, res) => {
   const { type, id } = req.params; // type: product|material
@@ -292,8 +626,78 @@ app.put("/api/opening-balance", auth.requirePermission("product.edit"), async (r
   }
 });
 
-// -------- Production (ACTIVE/COMPLETE) ----------
-app.get("/api/production", auth.requirePermission("production.view"), async (req, res) => {
+// -------- Đồng bộ OpeningBalances từ Stock (OpeningBalance + StockTransactions) ----------
+// Công thức: Balance = OpeningBalance + SUM(StockTransactions từ tuần opening đến hiện tại)
+// Đảm bảo MPS và Stock dùng cùng logic
+app.post("/api/opening-balance/sync-from-stock", auth.authMiddleware, async (req, res) => {
+  try {
+    const pool = await getPool();
+    const now = new Date();
+    const startYear = now.getFullYear();
+    const startWeek = Math.min(52, Math.max(1, getISOWeek(now)));
+    const today = now.toISOString().slice(0, 10);
+    const result = await pool.request()
+      .input("startYear", sql.SmallInt, startYear)
+      .input("startWeek", sql.TinyInt, startWeek)
+      .input("today", sql.Date, today)
+      .query(`
+        MERGE OpeningBalances AS t
+        USING (
+          SELECT st.ItemType, st.ItemId,
+                 ISNULL(ob.BalanceQty, 0) + SUM(st.Quantity) AS qty
+          FROM StockTransactions st
+          LEFT JOIN OpeningBalances ob ON ob.ItemType = st.ItemType AND ob.ItemId = st.ItemId
+          WHERE st.TransactionDate <= @today
+            AND (ob.ItemType IS NULL OR (YEAR(st.TransactionDate) > ob.StartYear OR (YEAR(st.TransactionDate) = ob.StartYear AND DATEPART(ISO_WEEK, st.TransactionDate) >= ob.StartWeek)))
+          GROUP BY st.ItemType, st.ItemId, ob.BalanceQty
+        ) AS s ON t.ItemType = s.ItemType AND t.ItemId = s.ItemId
+        WHEN MATCHED THEN UPDATE SET StartYear = @startYear, StartWeek = @startWeek, BalanceQty = s.qty, UpdatedAt = SYSDATETIME()
+        WHEN NOT MATCHED THEN INSERT (ItemType, ItemId, StartYear, StartWeek, BalanceQty) VALUES (s.ItemType, s.ItemId, @startYear, @startWeek, s.qty);
+      `);
+    res.json({ ok: true, startYear, startWeek, message: "Đã đồng bộ OpeningBalances từ Stock (OpeningBalance + StockTransactions)" });
+  } catch (err) {
+    if (err.message && /Invalid object name/i.test(err.message)) {
+      return res.status(503).json({ error: "Run fix_inventory.sql first" });
+    }
+    console.error("[Sync OpeningBalance]", err);
+    res.status(500).json({ error: "Sync failed: " + err.message });
+  }
+});
+function getISOWeek(d) {
+  d = new Date(d); d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  const y = d.getFullYear();
+  const start = new Date(y, 0, 1);
+  return Math.ceil((((d - start) / 86400000) + 1) / 7);
+}
+
+/** Trả về ngày đầu tuần (Thứ 2) của ISO week. VD: getISOWeekStart(2026, 1) => "2026-01-05" */
+function getISOWeekStartDate(year, week) {
+  const d = new Date(year, 0, 1 + (week - 1) * 7);
+  const dow = d.getDay();
+  const mondayOffset = dow === 0 ? -6 : 1 - dow;
+  d.setDate(d.getDate() + mondayOffset);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Parse ETA từ line: etaDate (ưu tiên) hoặc etaYear/etaWeek. Trả về { etaDate, etaYear, etaWeek } */
+function parseEtaFromLine(line) {
+  const etaDateStr = line.etaDate ? toDateString(line.etaDate) : null;
+  if (etaDateStr) {
+    const d = new Date(etaDateStr);
+    return {
+      etaDate: etaDateStr,
+      etaYear: d.getFullYear(),
+      etaWeek: Math.min(52, Math.max(1, getISOWeek(d))),
+    };
+  }
+  const y = parseInt(line.etaYear, 10) || new Date().getFullYear();
+  const w = parseInt(line.etaWeek, 10) || 1;
+  return { etaDate: null, etaYear: y, etaWeek: Math.min(53, Math.max(1, w)) };
+}
+
+// -------- Production (ACTIVE/COMPLETE) - for MPS pro_qty ----------
+app.get("/api/production", auth.requireAnyPermission("production.view", "mps.view"), async (req, res) => {
   const productId = parseIntSafe(req.query.productId);
   const fromYear = parseIntSafe(req.query.fromYear);
   const fromWeek = parseIntSafe(req.query.fromWeek);
@@ -331,7 +735,27 @@ app.get("/api/production", auth.requirePermission("production.view"), async (req
   }
 });
 
-// -------- Purchase (CONFIRM) - for MPS module ----------
+// -------- Purchase / Stock_in - debug: xem PO lines CONFIRM có ETA ----------
+app.get("/api/purchase/debug", auth.requirePermission("mps.view"), async (req, res) => {
+  try {
+    const pool = await getPool();
+    const r = await pool.request().query(`
+      SELECT po.PurchaseOrderId, po.PONumber, po.Status, pol.MaterialId, pol.EtaDate, pol.EtaYear, pol.EtaWeek, pol.Quantity
+      FROM PurchaseOrderLines pol
+      JOIN PurchaseOrders po ON po.PurchaseOrderId = pol.PurchaseOrderId
+      WHERE UPPER(po.Status) = 'CONFIRM'
+      ORDER BY pol.EtaDate, pol.EtaYear, pol.EtaWeek
+    `);
+    res.json({ count: r.recordset?.length || 0, rows: r.recordset || [] });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+// -------- Purchase / Stock_in - for MPS module ----------
+// Quá khứ: stock_in = phiếu nhập kho đã xác nhận (thực tế)
+// Tương lai: stock_in = phiếu mua hàng ETA (dự báo, hàng chưa về)
+// Tương lai: lấy TẤT CẢ PO trong range, loại trùng với past (ưu tiên actual)
 app.get("/api/purchase", auth.requirePermission("mps.view"), async (req, res) => {
   const materialId = parseIntSafe(req.query.materialId);
   const fromYear = parseIntSafe(req.query.fromYear);
@@ -344,26 +768,84 @@ app.get("/api/purchase", auth.requirePermission("mps.view"), async (req, res) =>
       .json({ error: "fromYear/fromWeek/toYear/toWeek required" });
   try {
     const pool = await getPool();
-    const result = await pool
-      .request()
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentWeek = Math.min(52, Math.max(1, getISOWeek(now)));
+    const request = pool.request()
       .input("materialId", sql.Int, materialId)
       .input("fromYear", sql.Int, fromYear)
       .input("fromWeek", sql.Int, fromWeek)
       .input("toYear", sql.Int, toYear)
-      .input("toWeek", sql.Int, toWeek).query(`
-        SELECT pol.MaterialId AS materialId, pol.EtaYear AS year, pol.EtaWeek AS week, SUM(pol.Quantity) AS qty
-        FROM PurchaseOrderLines pol
-        JOIN PurchaseOrders po ON po.PurchaseOrderId = pol.PurchaseOrderId
-        WHERE UPPER(po.Status) = 'CONFIRM'
-          AND (pol.EtaYear > @fromYear OR (pol.EtaYear = @fromYear AND pol.EtaWeek >= @fromWeek))
-          AND (pol.EtaYear < @toYear OR (pol.EtaYear = @toYear AND pol.EtaWeek <= @toWeek))
-          AND (@materialId IS NULL OR pol.MaterialId = @materialId)
-        GROUP BY pol.MaterialId, pol.EtaYear, pol.EtaWeek
+      .input("toWeek", sql.Int, toWeek)
+      .input("currentYear", sql.Int, currentYear)
+      .input("currentWeek", sql.Int, currentWeek);
+
+    // Quá khứ: phiếu nhập kho đã xác nhận (StockTransactions RECEIPT, STOCK_RECEIPT)
+    let pastRows = [];
+    try {
+      const pastResult = await request.query(`
+        SELECT st.ItemId AS materialId, DATEPART(YEAR, st.TransactionDate) AS year, DATEPART(ISO_WEEK, st.TransactionDate) AS week, SUM(st.Quantity) AS qty
+        FROM StockTransactions st
+        WHERE st.TransactionType = 'RECEIPT' AND st.ItemType = 'M'
+          AND st.ReferenceType = 'STOCK_RECEIPT'
+          AND (DATEPART(YEAR, st.TransactionDate) > @fromYear OR (DATEPART(YEAR, st.TransactionDate) = @fromYear AND DATEPART(ISO_WEEK, st.TransactionDate) >= @fromWeek))
+          AND (DATEPART(YEAR, st.TransactionDate) < @toYear OR (DATEPART(YEAR, st.TransactionDate) = @toYear AND DATEPART(ISO_WEEK, st.TransactionDate) <= @toWeek))
+          AND (DATEPART(YEAR, st.TransactionDate) < @currentYear OR (DATEPART(YEAR, st.TransactionDate) = @currentYear AND DATEPART(ISO_WEEK, st.TransactionDate) <= @currentWeek))
+          AND (@materialId IS NULL OR st.ItemId = @materialId)
+        GROUP BY st.ItemId, DATEPART(YEAR, st.TransactionDate), DATEPART(ISO_WEEK, st.TransactionDate)
       `);
-    res.json(result.recordset);
+      pastRows = pastResult.recordset || [];
+    } catch (e) {
+      if (!/Invalid object name|StockTransactions/i.test(e.message || "")) throw e;
+    }
+
+    // Tương lai: phiếu mua hàng CONFIRM (EtaDate - dự báo, tự tính year/week)
+    // Lấy TẤT CẢ PO lines trong range, rồi loại những tuần đã có trong past (tránh trùng)
+    let futureRows = [];
+    try {
+      const futureResult = await pool.request()
+        .input("materialId", sql.Int, materialId)
+        .input("fromYear", sql.Int, fromYear)
+        .input("fromWeek", sql.Int, fromWeek)
+        .input("toYear", sql.Int, toYear)
+        .input("toWeek", sql.Int, toWeek)
+        .query(`
+          SELECT pol.MaterialId AS materialId,
+            COALESCE(DATEPART(YEAR, pol.EtaDate), pol.EtaYear) AS year,
+            COALESCE(DATEPART(ISO_WEEK, pol.EtaDate), pol.EtaWeek) AS week,
+            SUM(pol.Quantity) AS qty
+          FROM PurchaseOrderLines pol
+          JOIN PurchaseOrders po ON po.PurchaseOrderId = pol.PurchaseOrderId
+          WHERE UPPER(LTRIM(RTRIM(po.Status))) = 'CONFIRM'
+            AND (pol.EtaDate IS NOT NULL OR (pol.EtaYear IS NOT NULL AND pol.EtaWeek IS NOT NULL))
+            AND (
+              (COALESCE(DATEPART(YEAR, pol.EtaDate), pol.EtaYear) > @fromYear)
+              OR (COALESCE(DATEPART(YEAR, pol.EtaDate), pol.EtaYear) = @fromYear AND COALESCE(DATEPART(ISO_WEEK, pol.EtaDate), pol.EtaWeek) >= @fromWeek)
+            )
+            AND (
+              (COALESCE(DATEPART(YEAR, pol.EtaDate), pol.EtaYear) < @toYear)
+              OR (COALESCE(DATEPART(YEAR, pol.EtaDate), pol.EtaYear) = @toYear AND COALESCE(DATEPART(ISO_WEEK, pol.EtaDate), pol.EtaWeek) <= @toWeek)
+            )
+            AND (@materialId IS NULL OR pol.MaterialId = @materialId)
+          GROUP BY pol.MaterialId, COALESCE(DATEPART(YEAR, pol.EtaDate), pol.EtaYear), COALESCE(DATEPART(ISO_WEEK, pol.EtaDate), pol.EtaWeek)
+        `);
+      const allFuture = futureResult.recordset || [];
+      const pastKeys = new Set(pastRows.map(r => `${r.materialId}_${r.year}_${r.week}`));
+      futureRows = allFuture.filter(r => !pastKeys.has(`${r.materialId}_${r.year}_${r.week}`));
+    } catch (e) {
+      if (!/Invalid object name|PurchaseOrder/i.test(e.message || "")) throw e;
+    }
+
+    res.json([...pastRows, ...futureRows]);
   } catch (err) {
+    if (err.message && /Invalid object name/i.test(err.message)) {
+      return res.status(503).json({ error: "Run fix_inventory.sql and fix_stock_receipt.sql first" });
+    }
+    if (err.message && /Invalid column name 'EtaDate'/i.test(err.message)) {
+      return res.status(503).json({ error: "Run fix_eta_date.sql first" });
+    }
     console.error(err);
-    res.status(500).json({ error: "Failed to fetch purchase" });
+    res.status(500).json({ error: "Failed to fetch purchase/stock_in" });
   }
 });
 
@@ -783,50 +1265,144 @@ app.post("/api/production-orders", auth.requirePermission("production.edit"), as
 app.put("/api/production-orders/:id", auth.requirePermission("production.edit"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
-  const { productId, quantity, planYear, planWeek, status } = req.body || {};
+  const { productId, quantity, planYear, planWeek, status, warehouseMaterialId, warehouseProductId } = req.body || {};
   const normStatus = status ? status.toUpperCase() : null;
   if (normStatus && !["INITIAL", "ACTIVE", "COMPLETE"].includes(normStatus))
     return res
       .status(400)
       .json({ error: "status must be INITIAL, ACTIVE or COMPLETE" });
 
+  let transaction;
   try {
     const pool = await getPool();
-    const request = pool.request().input("id", sql.Int, id);
-    if (productId) request.input("productId", sql.Int, productId);
-    if (quantity != null)
-      request.input("quantity", sql.Decimal(18, 3), quantity);
-    if (planYear) request.input("planYear", sql.Int, planYear);
-    if (planWeek) request.input("planWeek", sql.Int, planWeek);
-    if (normStatus) request.input("status", sql.NVarChar, normStatus);
+    transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    const request = new sql.Request(transaction).input("id", sql.Int, id);
 
-    await request.query(`
-      UPDATE ProductionOrders
-      SET ProductId = COALESCE(@productId, ProductId),
-          Quantity = COALESCE(@quantity, Quantity),
-          PlanYear = COALESCE(@planYear, PlanYear),
-          PlanWeek = COALESCE(@planWeek, PlanWeek),
-          Status = COALESCE(@status, Status),
-          UpdatedAt = SYSDATETIME()
-      WHERE ProductionOrderId = @id;
-    `);
+    // Fetch current PO (WarehouseMaterialId/ProductId có thể chưa có nếu chưa chạy fix_inventory)
+    let currentResult, hasWarehouseCols = true;
+    try {
+      currentResult = await request.query(`
+        SELECT Status, ProductId, Quantity, WarehouseMaterialId, WarehouseProductId
+        FROM ProductionOrders WHERE ProductionOrderId = @id
+      `);
+    } catch (colErr) {
+      if (colErr.message && /WarehouseMaterialId|WarehouseProductId|Invalid column/i.test(colErr.message)) {
+        hasWarehouseCols = false;
+        currentResult = await new sql.Request(transaction).input("id", sql.Int, id).query(`
+          SELECT Status, ProductId, Quantity FROM ProductionOrders WHERE ProductionOrderId = @id
+        `);
+        currentResult.recordset.forEach(r => { r.WarehouseMaterialId = 1; r.WarehouseProductId = 2; });
+      } else throw colErr;
+    }
+    const current = currentResult.recordset[0];
+    if (!current) {
+      await transaction.rollback();
+      return res.status(404).json({ error: "Production order not found" });
+    }
+    const oldStatus = current.Status || "";
+    const prodId = productId || current.ProductId;
+    const qty = quantity != null ? parseFloat(quantity) : parseFloat(current.Quantity);
+    const whMaterial = warehouseMaterialId ? parseInt(warehouseMaterialId, 10) : (current.WarehouseMaterialId || 1);
+    const whProduct = warehouseProductId ? parseInt(warehouseProductId, 10) : (current.WarehouseProductId || 2);
+
+    const updates = [];
+    if (productId) { request.input("productId", sql.Int, productId); updates.push("ProductId = @productId"); }
+    if (quantity != null) { request.input("quantity", sql.Decimal(18, 3), quantity); updates.push("Quantity = @quantity"); }
+    if (planYear) { request.input("planYear", sql.Int, planYear); updates.push("PlanYear = @planYear"); }
+    if (planWeek) { request.input("planWeek", sql.Int, planWeek); updates.push("PlanWeek = @planWeek"); }
+    if (normStatus) { request.input("status", sql.NVarChar, normStatus); updates.push("Status = @status"); }
+    if (hasWarehouseCols && warehouseMaterialId != null) { request.input("warehouseMaterialId", sql.Int, whMaterial); updates.push("WarehouseMaterialId = @warehouseMaterialId"); }
+    if (hasWarehouseCols && warehouseProductId != null) { request.input("warehouseProductId", sql.Int, whProduct); updates.push("WarehouseProductId = @warehouseProductId"); }
+
+    if (updates.length) {
+      updates.push("UpdatedAt = SYSDATETIME()");
+      await request.query(`
+        UPDATE ProductionOrders SET ${updates.join(", ")} WHERE ProductionOrderId = @id
+      `);
+    }
+
+    // When status changes to COMPLETE: PRODUCTION_OUT (NVL), PRODUCTION_IN (TP)
+    let stockWarning = null;
+    if (normStatus === "COMPLETE" && oldStatus !== "COMPLETE") {
+      const receiptDate = new Date().toISOString().slice(0, 10);
+      const createdByUserId = req.user?.UserId || null;
+      try {
+        const bomResult = await new sql.Request(transaction).input("productId", sql.Int, prodId).query(`
+          SELECT MaterialId, ConsumePerUnit FROM BomLines WHERE ProductId = @productId
+        `);
+        for (const bl of bomResult.recordset) {
+          const consumeQty = (parseFloat(bl.ConsumePerUnit) || 0) * qty;
+          if (consumeQty <= 0) continue;
+          const tr1 = new sql.Request(transaction);
+          await tr1.input("whId1", sql.Int, whMaterial).input("itemId1", sql.Int, bl.MaterialId)
+            .input("qty1", sql.Decimal(18, 3), -consumeQty).input("date1", sql.Date, receiptDate)
+            .input("refId1", sql.Int, id).input("createdBy1", sql.Int, createdByUserId)
+            .query(`
+              INSERT INTO StockTransactions (TransactionType, TransactionDate, WarehouseId, ItemType, ItemId, Quantity, ReferenceType, ReferenceId, CreatedBy)
+              VALUES ('PRODUCTION_OUT', @date1, @whId1, 'M', @itemId1, @qty1, 'PRODUCTION_ORDER', @refId1, @createdBy1)
+            `);
+          const tr2 = new sql.Request(transaction);
+          await tr2.input("whId2", sql.Int, whMaterial).input("itemType2", sql.Char(1), "M")
+            .input("itemId2", sql.Int, bl.MaterialId).input("qty2", sql.Decimal(18, 3), -consumeQty)
+            .query(`
+              MERGE StockBalances AS t
+              USING (SELECT @whId2 AS wh, @itemType2 AS it, @itemId2 AS iid) AS s
+              ON t.WarehouseId=s.wh AND t.ItemType=s.it AND t.ItemId=s.iid
+              WHEN MATCHED THEN UPDATE SET Quantity = Quantity + @qty2, LastUpdatedAt = SYSDATETIME()
+              WHEN NOT MATCHED THEN INSERT (WarehouseId, ItemType, ItemId, Quantity) VALUES (@whId2, @itemType2, @itemId2, @qty2);
+            `);
+        }
+        const tr3 = new sql.Request(transaction);
+        await tr3.input("whId3", sql.Int, whProduct).input("itemId3", sql.Int, prodId)
+          .input("qty3", sql.Decimal(18, 3), qty).input("date3", sql.Date, receiptDate)
+          .input("refId3", sql.Int, id).input("createdBy3", sql.Int, createdByUserId)
+          .query(`
+            INSERT INTO StockTransactions (TransactionType, TransactionDate, WarehouseId, ItemType, ItemId, Quantity, ReferenceType, ReferenceId, CreatedBy)
+            VALUES ('PRODUCTION_IN', @date3, @whId3, 'P', @itemId3, @qty3, 'PRODUCTION_ORDER', @refId3, @createdBy3)
+          `);
+        const tr4 = new sql.Request(transaction);
+        await tr4.input("whId4", sql.Int, whProduct).input("itemType4", sql.Char(1), "P")
+          .input("itemId4", sql.Int, prodId).input("qty4", sql.Decimal(18, 3), qty)
+          .query(`
+            MERGE StockBalances AS t
+            USING (SELECT @whId4 AS wh, @itemType4 AS it, @itemId4 AS iid) AS s
+            ON t.WarehouseId=s.wh AND t.ItemType=s.it AND t.ItemId=s.iid
+            WHEN MATCHED THEN UPDATE SET Quantity = Quantity + @qty4, LastUpdatedAt = SYSDATETIME()
+            WHEN NOT MATCHED THEN INSERT (WarehouseId, ItemType, ItemId, Quantity) VALUES (@whId4, @itemType4, @itemId4, @qty4);
+          `);
+      } catch (invErr) {
+        stockWarning = invErr?.message || String(invErr);
+        console.warn("[Production] Stock integration skipped:", stockWarning);
+        console.warn("[Production] Full error:", invErr);
+        // Không throw - vẫn cho phép cập nhật trạng thái COMPLETE thành công
+      }
+    }
+
+    await transaction.commit();
     try {
       io.emit("production:changed", {
         type: "update",
         id,
-        productId: productId || null,
-        year: planYear || null,
-        week: planWeek || null,
+        productId: productId ?? prodId,
+        year: planYear ?? current?.PlanYear ?? null,
+        week: planWeek ?? current?.PlanWeek ?? null,
         status: normStatus || null,
       });
     } catch (notifyErr) {
       console.error("[Socket] Failed to emit production:changed (update)", notifyErr);
     }
-
-    res.json({ ok: true });
+    const response = { ok: true };
+    if (stockWarning) response.stockWarning = stockWarning;
+    res.json(response);
   } catch (err) {
     console.error("[ProductionOrders Update Error]", err);
-    res.status(500).json({ error: "Failed to update production order" });
+    try {
+      if (transaction) await transaction.rollback();
+    } catch (_) {}
+    res.status(500).json({
+      error: "Failed to update production order: " + (err.message || String(err)),
+    });
   }
 });
 
@@ -954,6 +1530,7 @@ app.get("/api/purchase-orders/:id/lines", auth.requirePermission("purchase.view"
                pol.Unit,
                pol.UnitPrice,
                pol.TotalAmount,
+               pol.EtaDate,
                pol.EtaYear,
                pol.EtaWeek
         FROM PurchaseOrderLines pol
@@ -964,6 +1541,9 @@ app.get("/api/purchase-orders/:id/lines", auth.requirePermission("purchase.view"
     res.json(result.recordset);
   } catch (err) {
     console.error("[PurchaseOrderLines Error]", err);
+    if (err.message && /Invalid column name 'EtaDate'/i.test(err.message)) {
+      return res.status(503).json({ error: "Run fix_eta_date.sql first" });
+    }
     res.status(500).json({ error: "Failed to fetch purchase order lines" });
   }
 });
@@ -975,6 +1555,7 @@ app.post("/api/purchase-orders", auth.requirePermission("purchase.add"), async (
     supplierName,
     customerCode,
     warehouseCode,
+    warehouseId,
     currency,
     invoiceDate,
     status,
@@ -1005,13 +1586,14 @@ app.post("/api/purchase-orders", auth.requirePermission("purchase.add"), async (
       0
     );
 
+    const whCode = warehouseCode || "WH-NVL";
     // Insert PurchaseOrder
     request
       .input("poNumber", sql.NVarChar, poNumber || null)
       .input("invoiceNumber", sql.NVarChar, invoiceNumber || null)
       .input("supplierName", sql.NVarChar, supplierName || null)
       .input("customerCode", sql.NVarChar, customerCode || null)
-      .input("warehouseCode", sql.NVarChar, warehouseCode || null)
+      .input("warehouseCode", sql.NVarChar, whCode)
       .input("currency", sql.NVarChar, currency || "VND")
       .input("invoiceDate", sql.Date, invoiceDate || null)
       .input("totalAmount", sql.Decimal(18, 2), totalAmount)
@@ -1026,8 +1608,9 @@ app.post("/api/purchase-orders", auth.requirePermission("purchase.add"), async (
     `);
     const poId = poResult.recordset[0].id;
 
-    // Insert PurchaseOrderLines
+    // Insert PurchaseOrderLines (etaDate ưu tiên, tự tính etaYear/etaWeek)
     for (const line of lines) {
+      const { etaDate, etaYear, etaWeek } = parseEtaFromLine(line);
       const lineRequest = new sql.Request(transaction);
       lineRequest
         .input("purchaseOrderId", sql.Int, poId)
@@ -1036,12 +1619,58 @@ app.post("/api/purchase-orders", auth.requirePermission("purchase.add"), async (
         .input("unit", sql.NVarChar, line.unit || "PCS")
         .input("unitPrice", sql.Decimal(18, 2), line.unitPrice || 0)
         .input("totalAmount", sql.Decimal(18, 2), line.totalAmount || 0)
-        .input("etaYear", sql.Int, line.etaYear)
-        .input("etaWeek", sql.Int, line.etaWeek);
+        .input("etaDate", sql.Date, etaDate)
+        .input("etaYear", sql.Int, etaYear)
+        .input("etaWeek", sql.Int, etaWeek);
       await lineRequest.query(`
-        INSERT INTO PurchaseOrderLines (PurchaseOrderId, MaterialId, Quantity, Unit, UnitPrice, TotalAmount, EtaYear, EtaWeek)
-        VALUES (@purchaseOrderId, @materialId, @quantity, @unit, @unitPrice, @totalAmount, @etaYear, @etaWeek);
+        INSERT INTO PurchaseOrderLines (PurchaseOrderId, MaterialId, Quantity, Unit, UnitPrice, TotalAmount, EtaDate, EtaYear, EtaWeek)
+        VALUES (@purchaseOrderId, @materialId, @quantity, @unit, @unitPrice, @totalAmount, @etaDate, @etaYear, @etaWeek);
       `);
+    }
+
+    // Khi tạo PO với status CONFIRM: tự động tạo phiếu nhập kho (DRAFT) - nhân viên kho xác nhận khi hàng đến
+    if (normStatus === "CONFIRM") {
+      try {
+        let effectiveWhId = 1;
+        const whLookup = await new sql.Request(transaction).input("code", sql.NVarChar, whCode).query(`
+          SELECT WarehouseId FROM Warehouses WHERE WarehouseCode = @code
+        `);
+        if (whLookup.recordset?.length) effectiveWhId = whLookup.recordset[0].WarehouseId;
+        const linesResult = await new sql.Request(transaction).input("id", sql.Int, poId).query(`
+          SELECT MaterialId, Quantity FROM PurchaseOrderLines WHERE PurchaseOrderId = @id
+        `);
+        const receiptDate = invoiceDate ? toDateString(invoiceDate) || String(invoiceDate).slice(0, 10) : new Date().toISOString().slice(0, 10);
+        const nextNum = await new sql.Request(transaction).query(`
+          SELECT 'RCP-' + FORMAT(GETDATE(),'yyyy') + '-' + RIGHT('000' + CAST(ISNULL(MAX(CAST(SUBSTRING(ReceiptNumber,10,4) AS INT)),0)+1 AS VARCHAR),4) AS num
+          FROM StockReceipts WHERE YEAR(ReceiptDate) = YEAR(GETDATE())
+        `);
+        const receiptNumber = nextNum.recordset[0]?.num || "RCP-" + new Date().getFullYear() + "-0001";
+        const receiptResult = await new sql.Request(transaction)
+          .input("number", sql.NVarChar, receiptNumber)
+          .input("warehouseId", sql.Int, effectiveWhId)
+          .input("purchaseOrderId", sql.Int, poId)
+          .input("date", sql.Date, receiptDate)
+          .input("createdBy", sql.Int, req.user?.UserId || null)
+          .query(`
+            INSERT INTO StockReceipts (ReceiptNumber, WarehouseId, PurchaseOrderId, ReceiptDate, Status, Notes, CreatedBy)
+            OUTPUT INSERTED.StockReceiptId AS id
+            VALUES (@number, @warehouseId, @purchaseOrderId, @date, 'DRAFT', N'Tự động từ phiếu mua hàng', @createdBy)
+          `);
+        const receiptId = receiptResult.recordset?.[0]?.id;
+        if (receiptId && linesResult.recordset?.length) {
+          for (const line of linesResult.recordset) {
+            const qty = parseFloat(line.Quantity) || 0;
+            if (qty <= 0) continue;
+            const lineReq = new sql.Request(transaction);
+            await lineReq.input("receiptId", sql.Int, receiptId).input("materialId", sql.Int, line.MaterialId).input("qty", sql.Decimal(18, 3), qty)
+              .query(`INSERT INTO StockReceiptLines (StockReceiptId, MaterialId, Quantity) VALUES (@receiptId, @materialId, @qty)`);
+          }
+        }
+      } catch (stockErr) {
+        if (stockErr.message && /Invalid object name|StockReceipts|StockReceiptLines/i.test(stockErr.message)) {
+          console.warn("[Purchase] Stock receipt creation skipped (run fix_stock_receipt.sql):", stockErr.message);
+        } else throw stockErr;
+      }
     }
 
     await transaction.commit();
@@ -1062,6 +1691,9 @@ app.post("/api/purchase-orders", auth.requirePermission("purchase.add"), async (
     try {
       if (transaction) await transaction.rollback();
     } catch (_) {}
+    if (err.message && /Invalid column name 'EtaDate'/i.test(err.message)) {
+      return res.status(503).json({ error: "Run fix_eta_date.sql first" });
+    }
     res.status(500).json({ error: "Failed to create purchase order" });
   }
 });
@@ -1075,6 +1707,7 @@ app.put("/api/purchase-orders/:id", auth.requirePermission("purchase.edit"), asy
     supplierName,
     customerCode,
     warehouseCode,
+    warehouseId,
     currency,
     invoiceDate,
     status,
@@ -1099,6 +1732,14 @@ app.put("/api/purchase-orders/:id", auth.requirePermission("purchase.edit"), asy
     transaction = new sql.Transaction(pool);
     await transaction.begin();
     const request = new sql.Request(transaction).input("id", sql.Int, id);
+
+    // Fetch current PO for status/warehouse (before update)
+    const currentPo = await request.query(`
+      SELECT Status, WarehouseCode FROM PurchaseOrders WHERE PurchaseOrderId = @id
+    `);
+    const oldStatus = currentPo.recordset[0]?.Status || "";
+    const oldWarehouseCode = currentPo.recordset[0]?.WarehouseCode;
+    const effectiveWhCode = warehouseCode !== undefined ? (warehouseCode || "WH-NVL") : (oldWarehouseCode || "WH-NVL");
 
     // Update PurchaseOrder
     const updates = [];
@@ -1159,8 +1800,9 @@ app.put("/api/purchase-orders/:id", auth.requirePermission("purchase.edit"), asy
         DELETE FROM PurchaseOrderLines WHERE PurchaseOrderId = @id;
       `);
 
-      // Insert new lines
+      // Insert new lines (etaDate ưu tiên, tự tính etaYear/etaWeek)
       for (const line of lines) {
+        const { etaDate, etaYear, etaWeek } = parseEtaFromLine(line);
         const lineRequest = new sql.Request(transaction);
         lineRequest
           .input("purchaseOrderId", sql.Int, id)
@@ -1169,11 +1811,12 @@ app.put("/api/purchase-orders/:id", auth.requirePermission("purchase.edit"), asy
           .input("unit", sql.NVarChar, line.unit || "PCS")
           .input("unitPrice", sql.Decimal(18, 2), line.unitPrice || 0)
           .input("totalAmount", sql.Decimal(18, 2), line.totalAmount || 0)
-          .input("etaYear", sql.Int, line.etaYear)
-          .input("etaWeek", sql.Int, line.etaWeek);
+          .input("etaDate", sql.Date, etaDate)
+          .input("etaYear", sql.Int, etaYear)
+          .input("etaWeek", sql.Int, etaWeek);
         await lineRequest.query(`
-          INSERT INTO PurchaseOrderLines (PurchaseOrderId, MaterialId, Quantity, Unit, UnitPrice, TotalAmount, EtaYear, EtaWeek)
-          VALUES (@purchaseOrderId, @materialId, @quantity, @unit, @unitPrice, @totalAmount, @etaYear, @etaWeek);
+          INSERT INTO PurchaseOrderLines (PurchaseOrderId, MaterialId, Quantity, Unit, UnitPrice, TotalAmount, EtaDate, EtaYear, EtaWeek)
+          VALUES (@purchaseOrderId, @materialId, @quantity, @unit, @unitPrice, @totalAmount, @etaDate, @etaYear, @etaWeek);
         `);
       }
 
@@ -1190,6 +1833,56 @@ app.put("/api/purchase-orders/:id", auth.requirePermission("purchase.edit"), asy
         SET TotalAmount = @totalAmount
         WHERE PurchaseOrderId = @id;
       `);
+    }
+
+    // Khi status chuyển sang CONFIRM: tự động tạo phiếu nhập kho (DRAFT) - nhân viên kho xác nhận khi hàng đến
+    if (normStatus === "CONFIRM" && oldStatus !== "CONFIRM") {
+      try {
+        const existingReceipt = await new sql.Request(transaction).input("purchaseOrderId", sql.Int, id).query(`
+          SELECT StockReceiptId FROM StockReceipts WHERE PurchaseOrderId = @purchaseOrderId
+        `);
+        if (!existingReceipt.recordset?.length) {
+          let effectiveWhId = 1;
+          const whLookup = await new sql.Request(transaction).input("code", sql.NVarChar, effectiveWhCode).query(`
+            SELECT WarehouseId FROM Warehouses WHERE WarehouseCode = @code
+          `);
+          if (whLookup.recordset?.length) effectiveWhId = whLookup.recordset[0].WarehouseId;
+          const linesResult = await new sql.Request(transaction).input("id", sql.Int, id).query(`
+            SELECT MaterialId, Quantity FROM PurchaseOrderLines WHERE PurchaseOrderId = @id
+          `);
+          const receiptDate = invoiceDate ? toDateString(invoiceDate) : new Date().toISOString().slice(0, 10);
+          const nextNum = await new sql.Request(transaction).query(`
+            SELECT 'RCP-' + FORMAT(GETDATE(),'yyyy') + '-' + RIGHT('000' + CAST(ISNULL(MAX(CAST(SUBSTRING(ReceiptNumber,10,4) AS INT)),0)+1 AS VARCHAR),4) AS num
+            FROM StockReceipts WHERE YEAR(ReceiptDate) = YEAR(GETDATE())
+          `);
+          const receiptNumber = nextNum.recordset[0]?.num || "RCP-" + new Date().getFullYear() + "-0001";
+          const receiptResult = await new sql.Request(transaction)
+            .input("number", sql.NVarChar, receiptNumber)
+            .input("warehouseId", sql.Int, effectiveWhId)
+            .input("purchaseOrderId", sql.Int, id)
+            .input("date", sql.Date, receiptDate)
+            .input("createdBy", sql.Int, req.user?.UserId || null)
+            .query(`
+              INSERT INTO StockReceipts (ReceiptNumber, WarehouseId, PurchaseOrderId, ReceiptDate, Status, Notes, CreatedBy)
+              OUTPUT INSERTED.StockReceiptId AS id
+              VALUES (@number, @warehouseId, @purchaseOrderId, @date, 'DRAFT', N'Tự động từ phiếu mua hàng', @createdBy)
+            `);
+          const receiptId = receiptResult.recordset?.[0]?.id;
+          if (receiptId && linesResult.recordset?.length) {
+            for (const line of linesResult.recordset) {
+              const qty = parseFloat(line.Quantity) || 0;
+              if (qty <= 0) continue;
+              const lineReq = new sql.Request(transaction);
+              await lineReq.input("receiptId", sql.Int, receiptId).input("materialId", sql.Int, line.MaterialId).input("qty", sql.Decimal(18, 3), qty)
+                .query(`INSERT INTO StockReceiptLines (StockReceiptId, MaterialId, Quantity) VALUES (@receiptId, @materialId, @qty)`);
+            }
+          }
+        }
+      } catch (stockErr) {
+        if (stockErr.message && /Invalid object name|StockReceipts|StockReceiptLines/i.test(stockErr.message)) {
+          console.warn("[Purchase] Stock receipt creation skipped (run fix_stock_receipt.sql):", stockErr.message);
+        } else throw stockErr;
+      }
     }
 
     await transaction.commit();
@@ -1210,6 +1903,9 @@ app.put("/api/purchase-orders/:id", auth.requirePermission("purchase.edit"), asy
     try {
       if (transaction) await transaction.rollback();
     } catch (_) {}
+    if (err.message && /Invalid column name 'EtaDate'/i.test(err.message)) {
+      return res.status(503).json({ error: "Run fix_eta_date.sql first" });
+    }
     res.status(500).json({ error: "Failed to update purchase order" });
   }
 });
@@ -1299,6 +1995,7 @@ app.get("/api/sales-orders/:id", auth.requirePermission("sales.view"), async (re
                so.TotalAmount,
                so.CreatedBy,
                so.AssignedTo,
+               so.WarehouseId,
                so.CreatedAt,
                so.UpdatedAt
         FROM SalesOrders so
@@ -1350,6 +2047,7 @@ app.post("/api/sales-orders", auth.requirePermission("sales.add"), async (req, r
     currency,
     createdBy,
     assignedTo,
+    warehouseId,
     lines,
   } = req.body || {};
   const normStatus = (status || "INITIAL").toUpperCase();
@@ -1369,6 +2067,7 @@ app.post("/api/sales-orders", auth.requirePermission("sales.add"), async (req, r
       (sum, line) => sum + (parseFloat(line.totalAmount) || 0),
       0
     );
+    const warehouseIdVal = warehouseId ? parseInt(warehouseId, 10) : 2;
 
     request
       .input("invoiceNumber", sql.NVarChar, invoiceNumber || null)
@@ -1379,13 +2078,25 @@ app.post("/api/sales-orders", auth.requirePermission("sales.add"), async (req, r
       .input("status", sql.NVarChar, normStatus)
       .input("currency", sql.NVarChar, currency || "VND")
       .input("createdBy", sql.NVarChar, createdBy || null)
-      .input("assignedTo", sql.NVarChar, assignedTo || null);
+      .input("assignedTo", sql.NVarChar, assignedTo || null)
+      .input("warehouseId", sql.Int, warehouseIdVal);
 
-    const soResult = await request.query(`
-      INSERT INTO SalesOrders (InvoiceNumber, CustomerName, CustomerCode, DeliveryDate, TotalAmount, Status, Currency, CreatedBy, AssignedTo)
-      OUTPUT INSERTED.SalesOrderId AS id
-      VALUES (@invoiceNumber, @customerName, @customerCode, @deliveryDate, @totalAmount, @status, @currency, @createdBy, @assignedTo);
-    `);
+    let soResult;
+    try {
+      soResult = await request.query(`
+        INSERT INTO SalesOrders (InvoiceNumber, CustomerName, CustomerCode, DeliveryDate, TotalAmount, Status, Currency, CreatedBy, AssignedTo, WarehouseId)
+        OUTPUT INSERTED.SalesOrderId AS id
+        VALUES (@invoiceNumber, @customerName, @customerCode, @deliveryDate, @totalAmount, @status, @currency, @createdBy, @assignedTo, @warehouseId);
+      `);
+    } catch (colErr) {
+      if (colErr.message && /Invalid column name 'WarehouseId'/i.test(colErr.message)) {
+        soResult = await request.query(`
+          INSERT INTO SalesOrders (InvoiceNumber, CustomerName, CustomerCode, DeliveryDate, TotalAmount, Status, Currency, CreatedBy, AssignedTo)
+          OUTPUT INSERTED.SalesOrderId AS id
+          VALUES (@invoiceNumber, @customerName, @customerCode, @deliveryDate, @totalAmount, @status, @currency, @createdBy, @assignedTo);
+        `);
+      } else throw colErr;
+    }
     const soId = soResult.recordset[0].id;
 
     for (const line of lines) {
@@ -1401,6 +2112,42 @@ app.post("/api/sales-orders", auth.requirePermission("sales.add"), async (req, r
         INSERT INTO SalesOrderLines (SalesOrderId, ProductId, Quantity, Unit, UnitPrice, TotalAmount)
         VALUES (@salesOrderId, @productId, @quantity, @unit, @unitPrice, @totalAmount);
       `);
+    }
+
+    if (normStatus === "CONFIRM") {
+      try {
+        const nextNum = await new sql.Request(transaction).query(`
+          SELECT 'ISS-' + FORMAT(GETDATE(),'yyyy') + '-' + RIGHT('000' + CAST(ISNULL(MAX(CAST(SUBSTRING(IssueNumber,10,4) AS INT)),0)+1 AS VARCHAR),4) AS num
+          FROM StockIssues WHERE YEAR(IssueDate) = YEAR(GETDATE())
+        `);
+        const issueNumber = nextNum.recordset[0]?.num || "ISS-" + new Date().getFullYear() + "-0001";
+        const issueDate = toDateString(deliveryDate) || new Date().toISOString().slice(0, 10);
+        const issueResult = await new sql.Request(transaction)
+          .input("number", sql.NVarChar, issueNumber)
+          .input("warehouseId", sql.Int, warehouseIdVal)
+          .input("salesOrderId", sql.Int, soId)
+          .input("date", sql.Date, issueDate)
+          .input("createdBy", sql.Int, req.user?.UserId || null)
+          .query(`
+            INSERT INTO StockIssues (IssueNumber, WarehouseId, SalesOrderId, IssueDate, Status, Notes, CreatedBy)
+            OUTPUT INSERTED.StockIssueId AS id
+            VALUES (@number, @warehouseId, @salesOrderId, @date, 'DRAFT', N'Tự động từ phiếu bán hàng', @createdBy)
+          `);
+        const issueId = issueResult.recordset?.[0]?.id;
+        if (issueId) {
+          for (const line of lines) {
+            const qty = parseFloat(line.quantity) || 0;
+            if (qty <= 0) continue;
+            const lineReq = new sql.Request(transaction);
+            await lineReq.input("issueId", sql.Int, issueId).input("productId", sql.Int, line.productId).input("qty", sql.Decimal(18, 3), qty)
+              .query(`INSERT INTO StockIssueLines (StockIssueId, ProductId, Quantity) VALUES (@issueId, @productId, @qty)`);
+          }
+        }
+      } catch (stockErr) {
+        if (stockErr.message && /Invalid object name|StockIssues|StockIssueLines/i.test(stockErr.message)) {
+          console.warn("[Sales] Stock issue creation skipped (run fix_inventory.sql):", stockErr.message);
+        } else throw stockErr;
+      }
     }
 
     await transaction.commit();
@@ -1433,6 +2180,7 @@ app.put("/api/sales-orders/:id", auth.requirePermission("sales.edit"), async (re
     currency,
     createdBy,
     assignedTo,
+    warehouseId,
     lines,
   } = req.body || {};
   const normStatus = status ? status.toUpperCase() : null;
@@ -1445,6 +2193,10 @@ app.put("/api/sales-orders/:id", auth.requirePermission("sales.edit"), async (re
     transaction = new sql.Transaction(pool);
     await transaction.begin();
     const request = new sql.Request(transaction).input("id", sql.Int, id);
+
+    const currentOrder = await request.query(`SELECT Status, DeliveryDate, WarehouseId FROM SalesOrders WHERE SalesOrderId = @id`);
+    const oldStatus = currentOrder.recordset[0]?.Status || "";
+    const oldWarehouseId = currentOrder.recordset[0]?.WarehouseId;
 
     const updates = [];
     if (invoiceNumber !== undefined) {
@@ -1479,12 +2231,21 @@ app.put("/api/sales-orders/:id", auth.requirePermission("sales.edit"), async (re
       request.input("assignedTo", sql.NVarChar, assignedTo || null);
       updates.push("AssignedTo = @assignedTo");
     }
+    if (warehouseId !== undefined) {
+      request.input("warehouseId", sql.Int, warehouseId ? parseInt(warehouseId, 10) : 2);
+      updates.push("WarehouseId = @warehouseId");
+    }
 
     if (updates.length) {
       updates.push("UpdatedAt = SYSDATETIME()");
-      await request.query(`
-        UPDATE SalesOrders SET ${updates.join(", ")} WHERE SalesOrderId = @id;
-      `);
+      try {
+        await request.query(`UPDATE SalesOrders SET ${updates.join(", ")} WHERE SalesOrderId = @id;`);
+      } catch (colErr) {
+        if (colErr.message && /Invalid column name 'WarehouseId'/i.test(colErr.message) && warehouseId !== undefined) {
+          updates = updates.filter(u => !u.includes("WarehouseId"));
+          if (updates.length > 1) await request.query(`UPDATE SalesOrders SET ${updates.join(", ")} WHERE SalesOrderId = @id;`);
+        } else throw colErr;
+      }
     }
 
     if (lines && Array.isArray(lines)) {
@@ -1513,6 +2274,55 @@ app.put("/api/sales-orders/:id", auth.requirePermission("sales.edit"), async (re
       await request.query(`
         UPDATE SalesOrders SET TotalAmount = @totalAmount WHERE SalesOrderId = @id;
       `);
+    }
+
+    if (normStatus === "CONFIRM" && oldStatus !== "CONFIRM") {
+      try {
+        const existingIssue = await new sql.Request(transaction).input("salesOrderId", sql.Int, id).query(`
+          SELECT StockIssueId FROM StockIssues WHERE SalesOrderId = @salesOrderId
+        `);
+        if (!existingIssue.recordset?.length) {
+          const soData = await new sql.Request(transaction).input("id", sql.Int, id).query(`
+            SELECT DeliveryDate, WarehouseId FROM SalesOrders WHERE SalesOrderId = @id
+          `);
+          const so = soData.recordset[0];
+          const whId = so?.WarehouseId || warehouseId ? parseInt(warehouseId, 10) : 2;
+          const issueDate = toDateString(so?.DeliveryDate) || new Date().toISOString().slice(0, 10);
+          const linesResult = await new sql.Request(transaction).input("id", sql.Int, id).query(`
+            SELECT ProductId, Quantity FROM SalesOrderLines WHERE SalesOrderId = @id
+          `);
+          const nextNum = await new sql.Request(transaction).query(`
+            SELECT 'ISS-' + FORMAT(GETDATE(),'yyyy') + '-' + RIGHT('000' + CAST(ISNULL(MAX(CAST(SUBSTRING(IssueNumber,10,4) AS INT)),0)+1 AS VARCHAR),4) AS num
+            FROM StockIssues WHERE YEAR(IssueDate) = YEAR(GETDATE())
+          `);
+          const issueNumber = nextNum.recordset[0]?.num || "ISS-" + new Date().getFullYear() + "-0001";
+          const issueResult = await new sql.Request(transaction)
+            .input("number", sql.NVarChar, issueNumber)
+            .input("warehouseId", sql.Int, whId)
+            .input("salesOrderId", sql.Int, id)
+            .input("date", sql.Date, issueDate)
+            .input("createdBy", sql.Int, req.user?.UserId || null)
+            .query(`
+              INSERT INTO StockIssues (IssueNumber, WarehouseId, SalesOrderId, IssueDate, Status, Notes, CreatedBy)
+              OUTPUT INSERTED.StockIssueId AS id
+              VALUES (@number, @warehouseId, @salesOrderId, @date, 'DRAFT', N'Tự động từ phiếu bán hàng', @createdBy)
+            `);
+          const issueId = issueResult.recordset?.[0]?.id;
+          if (issueId && linesResult.recordset?.length) {
+            for (const line of linesResult.recordset) {
+              const qty = parseFloat(line.Quantity) || 0;
+              if (qty <= 0) continue;
+              const lineReq = new sql.Request(transaction);
+              await lineReq.input("issueId", sql.Int, issueId).input("productId", sql.Int, line.ProductId).input("qty", sql.Decimal(18, 3), qty)
+                .query(`INSERT INTO StockIssueLines (StockIssueId, ProductId, Quantity) VALUES (@issueId, @productId, @qty)`);
+            }
+          }
+        }
+      } catch (stockErr) {
+        if (stockErr.message && /Invalid object name|StockIssues|StockIssueLines|Invalid column/i.test(stockErr.message)) {
+          console.warn("[Sales] Stock issue creation skipped (run fix_inventory.sql):", stockErr.message);
+        } else throw stockErr;
+      }
     }
 
     await transaction.commit();
@@ -1554,7 +2364,7 @@ app.delete("/api/sales-orders/:id", auth.requirePermission("sales.delete"), asyn
   }
 });
 
-// -------- Sales actual (CONFIRM) - SHIP_QTY từ hóa đơn bán hàng cho MPS ----------
+// -------- Sales actual - SHIP_QTY từ phiếu xuất kho CONFIRM (có nguồn gốc từ phiếu bán hàng) ----------
 app.get("/api/sales-actual", auth.requirePermission("mps.view"), async (req, res) => {
   const productId = parseIntSafe(req.query.productId);
   const fromYear = parseIntSafe(req.query.fromYear);
@@ -1574,22 +2384,25 @@ app.get("/api/sales-actual", auth.requirePermission("mps.view"), async (req, res
       .input("toWeek", sql.Int, toWeek);
 
     const result = await request.query(`
-      SELECT sol.ProductId AS productId,
-             DATEPART(YEAR, so.DeliveryDate) AS year,
-             DATEPART(ISO_WEEK, so.DeliveryDate) AS week,
-             SUM(sol.Quantity) AS qty
-      FROM SalesOrderLines sol
-      JOIN SalesOrders so ON so.SalesOrderId = sol.SalesOrderId
-      WHERE UPPER(so.Status) = 'CONFIRM'
-        AND so.DeliveryDate IS NOT NULL
-        AND (DATEPART(YEAR, so.DeliveryDate) > @fromYear OR (DATEPART(YEAR, so.DeliveryDate) = @fromYear AND DATEPART(ISO_WEEK, so.DeliveryDate) >= @fromWeek))
-        AND (DATEPART(YEAR, so.DeliveryDate) < @toYear OR (DATEPART(YEAR, so.DeliveryDate) = @toYear AND DATEPART(ISO_WEEK, so.DeliveryDate) <= @toWeek))
-        AND (@productId IS NULL OR sol.ProductId = @productId)
-      GROUP BY sol.ProductId, DATEPART(YEAR, so.DeliveryDate), DATEPART(ISO_WEEK, so.DeliveryDate)
+      SELECT sil.ProductId AS productId,
+             DATEPART(YEAR, si.IssueDate) AS year,
+             DATEPART(ISO_WEEK, si.IssueDate) AS week,
+             SUM(sil.Quantity) AS qty
+      FROM StockIssueLines sil
+      JOIN StockIssues si ON si.StockIssueId = sil.StockIssueId
+      WHERE si.Status = 'CONFIRM'
+        AND si.SalesOrderId IS NOT NULL
+        AND (DATEPART(YEAR, si.IssueDate) > @fromYear OR (DATEPART(YEAR, si.IssueDate) = @fromYear AND DATEPART(ISO_WEEK, si.IssueDate) >= @fromWeek))
+        AND (DATEPART(YEAR, si.IssueDate) < @toYear OR (DATEPART(YEAR, si.IssueDate) = @toYear AND DATEPART(ISO_WEEK, si.IssueDate) <= @toWeek))
+        AND (@productId IS NULL OR sil.ProductId = @productId)
+      GROUP BY sil.ProductId, DATEPART(YEAR, si.IssueDate), DATEPART(ISO_WEEK, si.IssueDate)
       ORDER BY year, week
     `);
     res.json(result.recordset);
   } catch (err) {
+    if (err.message && /Invalid object name|StockIssues|StockIssueLines/i.test(err.message)) {
+      return res.json([]);
+    }
     console.error("[Sales Actual Error]", err);
     res.status(500).json({ error: "Failed to fetch sales actual" });
   }
@@ -2037,6 +2850,1028 @@ app.get("/api/roles", auth.authMiddleware, async (req, res) => {
     res.json(result.recordset);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch roles" });
+  }
+});
+
+// -------- Inventory: Warehouses ----------
+app.get("/api/warehouses", auth.authMiddleware, async (req, res) => {
+  try {
+    const pool = await getPool();
+    const result = await pool.request().query(`
+      SELECT WarehouseId AS id, WarehouseCode AS code, WarehouseName AS name, WarehouseType AS type, Address AS address, IsActive AS isActive
+      FROM Warehouses ORDER BY WarehouseCode
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    if (err.message && /Invalid object name 'Warehouses'/i.test(err.message)) {
+      return res.status(503).json({ error: "Run fix_inventory.sql first" });
+    }
+    res.status(500).json({ error: "Failed to fetch warehouses" });
+  }
+});
+
+app.get("/api/warehouses/list", auth.authMiddleware, async (req, res) => {
+  try {
+    const pool = await getPool();
+    const type = (req.query.type || "").toUpperCase();
+    let query = "SELECT WarehouseId AS id, WarehouseCode AS code, WarehouseName AS name, WarehouseType AS type FROM Warehouses WHERE IsActive = 1 ORDER BY WarehouseCode";
+    if (type) {
+      const result = await pool.request().input("type", sql.NVarChar, type).query(`
+        SELECT WarehouseId AS id, WarehouseCode AS code, WarehouseName AS name, WarehouseType AS type
+        FROM Warehouses WHERE IsActive = 1 AND WarehouseType = @type ORDER BY WarehouseCode
+      `);
+      return res.json(result.recordset);
+    }
+    const result = await pool.request().query(query);
+    res.json(result.recordset);
+  } catch (err) {
+    if (err.message && /Invalid object name 'Warehouses'/i.test(err.message)) {
+      return res.json([]);
+    }
+    res.status(500).json({ error: "Failed to fetch warehouses" });
+  }
+});
+
+app.post("/api/warehouses", auth.authMiddleware, async (req, res) => {
+  const { code, name, type, address, isActive } = req.body || {};
+  if (!code || !name) return res.status(400).json({ error: "code and name required" });
+  try {
+    const pool = await getPool();
+    const result = await pool.request()
+      .input("code", sql.NVarChar, code)
+      .input("name", sql.NVarChar, name)
+      .input("type", sql.NVarChar, type || null)
+      .input("address", sql.NVarChar, address || null)
+      .input("isActive", sql.Bit, isActive !== false)
+      .query(`
+        INSERT INTO Warehouses (WarehouseCode, WarehouseName, WarehouseType, Address, IsActive)
+        OUTPUT INSERTED.WarehouseId AS id
+        VALUES (@code, @name, @type, @address, @isActive)
+      `);
+    res.status(201).json({ id: result.recordset[0].id });
+  } catch (err) {
+    if (err.message && /UNIQUE|duplicate/i.test(err.message)) {
+      return res.status(400).json({ error: "Warehouse code already exists" });
+    }
+    res.status(500).json({ error: "Failed to create warehouse" });
+  }
+});
+
+app.get("/api/warehouses/:id", auth.authMiddleware, async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const result = await pool.request().input("id", sql.Int, id).query(`
+      SELECT WarehouseId AS id, WarehouseCode AS code, WarehouseName AS name, WarehouseType AS type, Address AS address, IsActive AS isActive
+      FROM Warehouses WHERE WarehouseId = @id
+    `);
+    if (!result.recordset.length) return res.status(404).json({ error: "Warehouse not found" });
+    res.json(result.recordset[0]);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch warehouse" });
+  }
+});
+
+app.put("/api/warehouses/:id", auth.authMiddleware, async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  const { code, name, type, address, isActive } = req.body || {};
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    await pool.request()
+      .input("id", sql.Int, id)
+      .input("code", sql.NVarChar, code)
+      .input("name", sql.NVarChar, name)
+      .input("type", sql.NVarChar, type || null)
+      .input("address", sql.NVarChar, address || null)
+      .input("isActive", sql.Bit, isActive)
+      .query(`
+        UPDATE Warehouses SET WarehouseCode=@code, WarehouseName=@name, WarehouseType=@type, Address=@address, IsActive=@isActive, UpdatedAt=SYSDATETIME()
+        WHERE WarehouseId=@id
+      `);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update warehouse" });
+  }
+});
+
+app.delete("/api/warehouses/:id", auth.authMiddleware, async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    await pool.request().input("id", sql.Int, id).query("DELETE FROM Warehouses WHERE WarehouseId=@id");
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete warehouse" });
+  }
+});
+
+// -------- Inventory: Stock Transactions (lịch sử phiếu nhập/xuất) ----------
+app.get("/api/stock-transactions", auth.authMiddleware, auth.requirePermission("inventory.view"), async (req, res) => {
+  const warehouseId = parseIntSafe(req.query.warehouseId);
+  const itemCode = (req.query.itemCode || "").trim();
+  const transactionType = (req.query.transactionType || "").trim().toUpperCase();
+  const fromDate = (req.query.fromDate || "").trim();
+  const toDate = (req.query.toDate || "").trim();
+  const limit = Math.min(parseInt(req.query.limit, 10) || 500, 2000);
+  try {
+    const pool = await getPool();
+    const request = pool.request().input("limit", sql.Int, limit);
+    const conditions = ["1=1"];
+    if (warehouseId) { request.input("warehouseId", sql.Int, warehouseId); conditions.push("st.WarehouseId = @warehouseId"); }
+    if (itemCode) { request.input("itemCode", sql.NVarChar, itemCode); conditions.push("((st.ItemType='P' AND p.ProductCode = @itemCode) OR (st.ItemType='M' AND m.MaterialCode = @itemCode))"); }
+    if (transactionType) { request.input("transactionType", sql.NVarChar, transactionType); conditions.push("st.TransactionType = @transactionType"); }
+    if (fromDate) { request.input("fromDate", sql.Date, fromDate); conditions.push("st.TransactionDate >= @fromDate"); }
+    if (toDate) { request.input("toDate", sql.Date, toDate); conditions.push("st.TransactionDate <= @toDate"); }
+    const whereSql = conditions.join(" AND ");
+    const result = await request.query(`
+      SELECT st.StockTransactionId AS id, st.TransactionType AS transactionType, st.TransactionDate AS transactionDate,
+             st.WarehouseId, w.WarehouseCode AS warehouseCode, w.WarehouseName AS warehouseName,
+             st.ItemType AS itemType, st.ItemId AS itemId,
+             CASE WHEN st.ItemType='P' THEN p.ProductCode ELSE m.MaterialCode END AS itemCode,
+             CASE WHEN st.ItemType='P' THEN p.ProductName ELSE m.MaterialName END AS itemName,
+             st.Quantity AS quantity, st.ReferenceType AS referenceType, st.ReferenceId AS referenceId,
+             st.Notes AS notes, st.CreatedBy AS createdBy,
+             u.FullName AS createdByName, u.Username AS createdByUsername,
+             st.CreatedAt AS createdAt
+      FROM StockTransactions st
+      JOIN Warehouses w ON w.WarehouseId = st.WarehouseId
+      LEFT JOIN Products p ON st.ItemType='P' AND p.ProductId=st.ItemId
+      LEFT JOIN Materials m ON st.ItemType='M' AND m.MaterialId=st.ItemId
+      LEFT JOIN Users u ON u.UserId = st.CreatedBy
+      WHERE ${whereSql}
+      ORDER BY st.CreatedAt DESC, st.StockTransactionId DESC
+      OFFSET 0 ROWS FETCH NEXT @limit ROWS ONLY
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    if (err.message && /Invalid object name/i.test(err.message)) {
+      return res.status(503).json({ error: "Run fix_inventory.sql first" });
+    }
+    res.status(500).json({ error: "Failed to fetch stock transactions" });
+  }
+});
+
+// -------- Inventory: Stock Balances Debug (chi tiết giao dịch để kiểm tra) ----------
+app.get("/api/stock-balances/debug", auth.authMiddleware, async (req, res) => {
+  const warehouseId = parseIntSafe(req.query.warehouseId);
+  const itemCode = (req.query.itemCode || "").trim();
+  const dateStr = (req.query.date || "").trim();
+  const today = new Date().toISOString().slice(0, 10);
+  const asOfDate = dateStr || today;
+  if (!itemCode) return res.status(400).json({ error: "itemCode required" });
+  try {
+    const pool = await getPool();
+    const request = pool.request()
+      .input("date", sql.Date, asOfDate)
+      .input("itemCode", sql.NVarChar, itemCode);
+    if (warehouseId) request.input("warehouseId", sql.Int, warehouseId);
+    const whCond = warehouseId ? "AND st.WarehouseId = @warehouseId" : "";
+    const rows = await request.query(`
+      SELECT st.StockTransactionId, st.TransactionType, st.TransactionDate, st.Quantity,
+             w.WarehouseCode, CASE WHEN st.ItemType='P' THEN p.ProductCode ELSE m.MaterialCode END AS itemCode
+      FROM StockTransactions st
+      JOIN Warehouses w ON w.WarehouseId = st.WarehouseId
+      LEFT JOIN Products p ON st.ItemType='P' AND p.ProductId=st.ItemId
+      LEFT JOIN Materials m ON st.ItemType='M' AND m.MaterialId=st.ItemId
+      WHERE st.TransactionDate <= @date AND ((st.ItemType='P' AND p.ProductCode = @itemCode) OR (st.ItemType='M' AND m.MaterialCode = @itemCode))
+      ${whCond}
+      ORDER BY st.TransactionDate, st.StockTransactionId
+    `);
+    const list = rows.recordset || [];
+    const sum = list.reduce((a, r) => a + parseFloat(r.Quantity || 0), 0);
+    res.json({ asOfDate, transactions: list, sum });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// -------- Inventory: Đồng bộ StockBalances từ StockTransactions + OpeningBalances ----------
+app.post("/api/stock-balances/sync-from-transactions", auth.authMiddleware, auth.requirePermission("inventory.edit"), async (req, res) => {
+  try {
+    const pool = await getPool();
+    const today = new Date().toISOString().slice(0, 10);
+    await pool.request().input("date", sql.Date, today).query(`
+      WITH TxSum AS (
+        SELECT st.WarehouseId, st.ItemType, st.ItemId, SUM(st.Quantity) AS txQty
+        FROM StockTransactions st
+        LEFT JOIN OpeningBalances ob ON ob.ItemType = st.ItemType AND ob.ItemId = st.ItemId
+        WHERE st.TransactionDate <= @date
+          AND (ob.ItemType IS NULL OR (YEAR(st.TransactionDate) > ob.StartYear OR (YEAR(st.TransactionDate) = ob.StartYear AND DATEPART(ISO_WEEK, st.TransactionDate) >= ob.StartWeek)))
+        GROUP BY st.WarehouseId, st.ItemType, st.ItemId
+      ),
+      Ranked AS (
+        SELECT tx.*, ROW_NUMBER() OVER (PARTITION BY tx.ItemType, tx.ItemId ORDER BY tx.WarehouseId) AS rn
+        FROM TxSum tx
+      ),
+      WithOb AS (
+        SELECT r.WarehouseId, r.ItemType, r.ItemId,
+               r.txQty + ISNULL(CASE WHEN r.rn = 1 THEN ob.BalanceQty ELSE 0 END, 0) AS qty
+        FROM Ranked r
+        LEFT JOIN OpeningBalances ob ON ob.ItemType = r.ItemType AND ob.ItemId = r.ItemId
+      )
+      MERGE StockBalances AS t
+      USING (SELECT WarehouseId, ItemType, ItemId, qty FROM WithOb) AS s ON t.WarehouseId = s.WarehouseId AND t.ItemType = s.ItemType AND t.ItemId = s.ItemId
+      WHEN MATCHED THEN UPDATE SET Quantity = s.qty, LastUpdatedAt = SYSDATETIME()
+      WHEN NOT MATCHED BY TARGET THEN INSERT (WarehouseId, ItemType, ItemId, Quantity) VALUES (s.WarehouseId, s.ItemType, s.ItemId, s.qty)
+      WHEN NOT MATCHED BY SOURCE THEN DELETE;
+    `);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[StockBalances Sync Error]", err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// -------- Inventory: Stock Balances (số dư tại thời điểm) ----------
+// Tham số: warehouseId, itemCode (mã SP/NVL), date (YYYY-MM-DD). Không nhập = tất cả, thời điểm hiện tại
+// Công thức: OpeningBalance + SUM(StockTransactions từ tuần opening đến ngày asOf) - khớp MPS (opening + stock_in + stock_out)
+// Khi có itemCode: trả về TỔNG số dư (gộp tất cả kho) để khớp MPS. Khi không có itemCode: trả về theo từng kho.
+app.get("/api/stock-balances", auth.authMiddleware, async (req, res) => {
+  const warehouseId = parseIntSafe(req.query.warehouseId);
+  const itemCode = (req.query.itemCode || "").trim();
+  const dateStr = (req.query.date || "").trim();
+  const today = new Date().toISOString().slice(0, 10);
+  const asOfDate = dateStr || today;
+  try {
+    const pool = await getPool();
+    const request = pool.request().input("date", sql.Date, asOfDate);
+    if (warehouseId) request.input("warehouseId", sql.Int, warehouseId);
+    if (itemCode) request.input("itemCode", sql.NVarChar, itemCode);
+    const whCond = warehouseId ? "AND st.WarehouseId = @warehouseId" : "";
+    const codeCond = itemCode ? "AND ((st.ItemType='P' AND p.ProductCode = @itemCode) OR (st.ItemType='M' AND m.MaterialCode = @itemCode))" : "";
+
+    // Khi có itemCode: trả về TỔNG số dư (opening + tất cả giao dịch) để khớp MPS
+    if (itemCode) {
+      const totalResult = await request.query(`
+        WITH Items AS (
+          SELECT 'P' AS ItemType, ProductId AS ItemId, ProductCode AS code, ProductName AS name FROM Products WHERE ProductCode = @itemCode
+          UNION ALL
+          SELECT 'M', MaterialId, MaterialCode, MaterialName FROM Materials WHERE MaterialCode = @itemCode
+        ),
+        TxSum AS (
+          SELECT st.ItemType, st.ItemId, SUM(st.Quantity) AS txQty
+          FROM StockTransactions st
+          LEFT JOIN Products p ON st.ItemType='P' AND p.ProductId=st.ItemId
+          LEFT JOIN Materials m ON st.ItemType='M' AND m.MaterialId=st.ItemId
+          LEFT JOIN OpeningBalances ob ON ob.ItemType = st.ItemType AND ob.ItemId = st.ItemId
+          WHERE st.TransactionDate <= @date
+            AND (ob.ItemType IS NULL OR (YEAR(st.TransactionDate) > ob.StartYear OR (YEAR(st.TransactionDate) = ob.StartYear AND DATEPART(ISO_WEEK, st.TransactionDate) >= ob.StartWeek)))
+            ${codeCond}
+          GROUP BY st.ItemType, st.ItemId
+        )
+        SELECT i.ItemType AS itemType, i.ItemId AS itemId, i.code AS itemCode, i.name AS itemName,
+               ISNULL(ob.BalanceQty, 0) + ISNULL(tx.txQty, 0) AS quantity,
+               @date AS balanceDate,
+               N'Tổng' AS warehouseCode,
+               N'Tổng' AS warehouseName
+        FROM Items i
+        LEFT JOIN TxSum tx ON tx.ItemType = i.ItemType AND tx.ItemId = i.ItemId
+        LEFT JOIN OpeningBalances ob ON ob.ItemType = i.ItemType AND ob.ItemId = i.ItemId
+        WHERE ISNULL(ob.BalanceQty, 0) + ISNULL(tx.txQty, 0) <> 0
+      `);
+      return res.json(totalResult.recordset || []);
+    }
+
+    // Không có itemCode: trả về theo từng kho (opening cộng vào kho có rn=1)
+    const result = await request.query(`
+      WITH TxSum AS (
+        SELECT st.WarehouseId, st.ItemType, st.ItemId, SUM(st.Quantity) AS txQty
+        FROM StockTransactions st
+        JOIN Warehouses w ON w.WarehouseId = st.WarehouseId
+        LEFT JOIN Products p ON st.ItemType='P' AND p.ProductId=st.ItemId
+        LEFT JOIN Materials m ON st.ItemType='M' AND m.MaterialId=st.ItemId
+        LEFT JOIN OpeningBalances ob ON ob.ItemType = st.ItemType AND ob.ItemId = st.ItemId
+        WHERE st.TransactionDate <= @date
+          AND (ob.ItemType IS NULL OR (YEAR(st.TransactionDate) > ob.StartYear OR (YEAR(st.TransactionDate) = ob.StartYear AND DATEPART(ISO_WEEK, st.TransactionDate) >= ob.StartWeek)))
+          ${whCond} ${codeCond}
+        GROUP BY st.WarehouseId, st.ItemType, st.ItemId
+      ),
+      Ranked AS (
+        SELECT tx.WarehouseId, tx.ItemType, tx.ItemId, tx.txQty, ob.BalanceQty AS openingQty,
+               ROW_NUMBER() OVER (PARTITION BY tx.ItemType, tx.ItemId ORDER BY tx.WarehouseId) AS rn
+        FROM TxSum tx
+        LEFT JOIN OpeningBalances ob ON ob.ItemType = tx.ItemType AND ob.ItemId = tx.ItemId
+      ),
+      WithOpening AS (
+        SELECT WarehouseId, ItemType, ItemId, txQty + ISNULL(CASE WHEN rn = 1 THEN openingQty ELSE 0 END, 0) AS quantity
+        FROM Ranked
+      )
+      SELECT w.WarehouseId, w.WarehouseCode AS warehouseCode, w.WarehouseName AS warehouseName,
+             wo.ItemType AS itemType, wo.ItemId AS itemId,
+             CASE WHEN wo.ItemType='P' THEN p.ProductCode ELSE m.MaterialCode END AS itemCode,
+             CASE WHEN wo.ItemType='P' THEN p.ProductName ELSE m.MaterialName END AS itemName,
+             wo.quantity,
+             @date AS balanceDate
+      FROM WithOpening wo
+      JOIN Warehouses w ON w.WarehouseId = wo.WarehouseId
+      LEFT JOIN Products p ON wo.ItemType='P' AND p.ProductId=wo.ItemId
+      LEFT JOIN Materials m ON wo.ItemType='M' AND m.MaterialId=wo.ItemId
+      WHERE wo.quantity <> 0
+      ORDER BY wo.ItemType, itemCode
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    if (err.message && /Invalid object name/i.test(err.message)) {
+      return res.status(503).json({ error: "Run fix_inventory.sql first" });
+    }
+    res.status(500).json({ error: "Failed to fetch stock balances" });
+  }
+});
+
+// -------- Inventory: Stock Report by Week ----------
+app.get("/api/stock-report-by-week", auth.authMiddleware, auth.requirePermission("inventory.view"), async (req, res) => {
+  const year = parseIntSafe(req.query.year) || new Date().getFullYear();
+  const fromWeek = parseIntSafe(req.query.fromWeek) || 1;
+  const toWeek = parseIntSafe(req.query.toWeek) || 52;
+  const warehouseId = parseIntSafe(req.query.warehouseId);
+  try {
+    const pool = await getPool();
+    const request = pool.request()
+      .input("year", sql.Int, year)
+      .input("fromWeek", sql.Int, fromWeek)
+      .input("toWeek", sql.Int, toWeek);
+    let whFilter = "";
+    if (warehouseId) {
+      request.input("warehouseId", sql.Int, warehouseId);
+      whFilter = "AND st.WarehouseId = @warehouseId";
+    }
+    const result = await request.query(`
+      WITH Items AS (
+        SELECT 'P' AS ItemType, ProductId AS ItemId, ProductCode AS code, ProductName AS name FROM Products
+        UNION ALL
+        SELECT 'M', MaterialId, MaterialCode, MaterialName FROM Materials
+      ),
+      WeeklyMovements AS (
+        SELECT st.ItemType, st.ItemId, DATEPART(ISO_WEEK, st.TransactionDate) AS wk, DATEPART(YEAR, st.TransactionDate) AS yr,
+               SUM(st.Quantity) AS netQty
+        FROM StockTransactions st
+        LEFT JOIN OpeningBalances ob ON ob.ItemType = st.ItemType AND ob.ItemId = st.ItemId
+        WHERE DATEPART(YEAR, st.TransactionDate) = @year AND DATEPART(ISO_WEEK, st.TransactionDate) >= @fromWeek AND DATEPART(ISO_WEEK, st.TransactionDate) <= @toWeek
+          AND (ob.ItemType IS NULL OR (DATEPART(YEAR, st.TransactionDate) > ob.StartYear OR (DATEPART(YEAR, st.TransactionDate) = ob.StartYear AND DATEPART(ISO_WEEK, st.TransactionDate) >= ob.StartWeek)))
+        ${whFilter}
+        GROUP BY st.ItemType, st.ItemId, DATEPART(ISO_WEEK, st.TransactionDate), DATEPART(YEAR, st.TransactionDate)
+      )
+      SELECT i.ItemType, i.ItemId, i.code, i.name, wm.wk, wm.netQty
+      FROM Items i
+      LEFT JOIN WeeklyMovements wm ON i.ItemType = wm.ItemType AND i.ItemId = wm.ItemId
+      ORDER BY i.ItemType, i.code, wm.wk
+    `);
+    const itemsResult = await pool.request().query(`
+      SELECT 'P' AS ItemType, ProductId AS ItemId, ProductCode AS code, ProductName AS name FROM Products
+      UNION ALL
+      SELECT 'M', MaterialId, MaterialCode, MaterialName FROM Materials
+      ORDER BY ItemType, code
+    `);
+    const items = itemsResult.recordset;
+    const movements = result.recordset || [];
+    const obResult = await pool.request().query(`SELECT ItemType, ItemId, StartYear, StartWeek, BalanceQty FROM OpeningBalances`);
+    const openingMap = {};
+    (obResult.recordset || []).forEach(r => {
+      openingMap[`${r.ItemType}_${r.ItemId}`] = {
+        balance: parseFloat(r.BalanceQty) || 0,
+        year: r.StartYear,
+        week: r.StartWeek
+      };
+    });
+    const stockByWeek = {};
+    items.forEach(it => {
+      const key = `${it.ItemType}_${it.ItemId}`;
+      stockByWeek[key] = {};
+      const ob = openingMap[key];
+      const openingWeek = ob ? ob.week : 1;
+      const openingYear = ob ? ob.year : year;
+      let running = 0;
+      // Khi fromWeek > openingWeek: cộng dồn từ tuần mở đầu đến trước fromWeek
+      if (ob && year === openingYear && fromWeek > openingWeek) {
+        running = ob.balance;
+        for (let ww = openingWeek; ww < fromWeek; ww++) {
+          const mov = movements.find(m => m.ItemType === it.ItemType && m.ItemId === it.ItemId && m.wk === ww);
+          if (mov) running += parseFloat(mov.netQty) || 0;
+        }
+      }
+      for (let w = fromWeek; w <= toWeek; w++) {
+        const isAtOrAfterOpening = !ob || (year > openingYear || (year === openingYear && w >= openingWeek));
+        if (isAtOrAfterOpening) {
+          if (ob && year === openingYear && w === openingWeek) running = ob.balance;
+          const mov = movements.find(m => m.ItemType === it.ItemType && m.ItemId === it.ItemId && m.wk === w);
+          if (mov) running += parseFloat(mov.netQty) || 0;
+        }
+        stockByWeek[key][w] = running;
+      }
+    });
+    const weekColumns = [];
+    for (let w = fromWeek; w <= toWeek; w++) weekColumns.push(w);
+    res.json({ items, weekColumns, year, fromWeek, toWeek, warehouseId, stockByWeek });
+  } catch (err) {
+    if (err.message && /Invalid object name/i.test(err.message)) {
+      return res.status(503).json({ error: "Run fix_inventory.sql first" });
+    }
+    res.status(500).json({ error: "Failed to fetch stock report" });
+  }
+});
+
+// -------- Inventory: Stock Adjustments ----------
+app.get("/api/stock-adjustments", auth.authMiddleware, auth.requirePermission("inventory.view"), async (req, res) => {
+  const warehouseId = parseIntSafe(req.query.warehouseId);
+  const status = (req.query.status || "").toUpperCase();
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+    const conditions = ["1=1"];
+    if (warehouseId) { request.input("warehouseId", sql.Int, warehouseId); conditions.push("sa.WarehouseId = @warehouseId"); }
+    if (status) { request.input("status", sql.NVarChar, status); conditions.push("sa.Status = @status"); }
+    const result = await request.query(`
+      SELECT sa.StockAdjustmentId AS id, sa.AdjustmentNumber, sa.WarehouseId, w.WarehouseCode, w.WarehouseName,
+             sa.AdjustmentDate, sa.Reason, sa.Status, sa.CreatedAt, sa.ConfirmedAt,
+             u1.FullName AS createdByName, u2.FullName AS confirmedByName
+      FROM StockAdjustments sa
+      JOIN Warehouses w ON w.WarehouseId = sa.WarehouseId
+      LEFT JOIN Users u1 ON u1.UserId = sa.CreatedBy
+      LEFT JOIN Users u2 ON u2.UserId = sa.ConfirmedBy
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY sa.CreatedAt DESC
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    if (err.message && /Invalid object name/i.test(err.message)) {
+      return res.status(503).json({ error: "Run fix_inventory.sql first" });
+    }
+    res.status(500).json({ error: "Failed to fetch adjustments" });
+  }
+});
+
+app.get("/api/stock-adjustments/:id", auth.authMiddleware, auth.requirePermission("inventory.view"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const header = await pool.request().input("id", sql.Int, id).query(`
+      SELECT sa.*, w.WarehouseCode, w.WarehouseName,
+             u1.FullName AS createdByName, u2.FullName AS confirmedByName
+      FROM StockAdjustments sa
+      JOIN Warehouses w ON w.WarehouseId = sa.WarehouseId
+      LEFT JOIN Users u1 ON u1.UserId = sa.CreatedBy
+      LEFT JOIN Users u2 ON u2.UserId = sa.ConfirmedBy
+      WHERE sa.StockAdjustmentId = @id
+    `);
+    if (!header.recordset.length) return res.status(404).json({ error: "Not found" });
+    const lines = await pool.request().input("id", sql.Int, id).query(`
+      SELECT sal.*, CASE WHEN sal.ItemType='P' THEN p.ProductCode ELSE m.MaterialCode END AS itemCode,
+             CASE WHEN sal.ItemType='P' THEN p.ProductName ELSE m.MaterialName END AS itemName
+      FROM StockAdjustmentLines sal
+      LEFT JOIN Products p ON sal.ItemType='P' AND p.ProductId=sal.ItemId
+      LEFT JOIN Materials m ON sal.ItemType='M' AND m.MaterialId=sal.ItemId
+      WHERE sal.StockAdjustmentId = @id
+    `);
+    const adj = header.recordset[0];
+    adj.lines = lines.recordset;
+    res.json(adj);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch adjustment" });
+  }
+});
+
+app.post("/api/stock-adjustments", auth.authMiddleware, auth.requirePermission("inventory.adjust"), async (req, res) => {
+  const { warehouseId, adjustmentDate, reason, lines } = req.body || {};
+  if (!warehouseId || !adjustmentDate || !Array.isArray(lines) || !lines.length) {
+    return res.status(400).json({ error: "warehouseId, adjustmentDate and lines required" });
+  }
+  try {
+    const pool = await getPool();
+    const nextNum = await pool.request().query(`
+      SELECT 'ADJ-' + FORMAT(GETDATE(),'yyyy') + '-' + RIGHT('000' + CAST(ISNULL(MAX(CAST(SUBSTRING(AdjustmentNumber,10,4) AS INT)),0)+1 AS VARCHAR),4) AS num
+      FROM StockAdjustments WHERE YEAR(AdjustmentDate) = YEAR(GETDATE())
+    `);
+    const adjNumber = nextNum.recordset[0]?.num || "ADJ-" + new Date().getFullYear() + "-0001";
+    const adjResult = await pool.request()
+      .input("number", sql.NVarChar, adjNumber)
+      .input("warehouseId", sql.Int, warehouseId)
+      .input("date", sql.Date, adjustmentDate)
+      .input("reason", sql.NVarChar, reason || null)
+      .input("createdBy", sql.Int, req.user?.UserId || null)
+      .query(`
+        INSERT INTO StockAdjustments (AdjustmentNumber, WarehouseId, AdjustmentDate, Reason, Status, CreatedBy)
+        OUTPUT INSERTED.StockAdjustmentId AS id
+        VALUES (@number, @warehouseId, @date, @reason, 'DRAFT', @createdBy)
+      `);
+    const adjId = adjResult.recordset[0].id;
+    for (const line of lines) {
+      const qtyBefore = parseFloat(line.quantityBefore) || 0;
+      const qtyAdjust = parseFloat(line.quantityAdjust) || 0;
+      const qtyAfter = qtyBefore + qtyAdjust;
+      await pool.request()
+        .input("adjId", sql.Int, adjId)
+        .input("itemType", sql.Char(1), line.itemType)
+        .input("itemId", sql.Int, line.itemId)
+        .input("qtyBefore", sql.Decimal(18, 3), qtyBefore)
+        .input("qtyAdjust", sql.Decimal(18, 3), qtyAdjust)
+        .input("qtyAfter", sql.Decimal(18, 3), qtyAfter)
+        .input("notes", sql.NVarChar, line.notes || null)
+        .query(`
+          INSERT INTO StockAdjustmentLines (StockAdjustmentId, ItemType, ItemId, QuantityBefore, QuantityAdjust, QuantityAfter, Notes)
+          VALUES (@adjId, @itemType, @itemId, @qtyBefore, @qtyAdjust, @qtyAfter, @notes)
+        `);
+    }
+    res.status(201).json({ id: adjId, adjustmentNumber: adjNumber });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to create adjustment" });
+  }
+});
+
+app.post("/api/stock-adjustments/:id/confirm", auth.authMiddleware, auth.requirePermission("inventory.confirm"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const adj = await pool.request().input("id", sql.Int, id).query(`
+      SELECT * FROM StockAdjustments WHERE StockAdjustmentId=@id AND Status='DRAFT'
+    `);
+    if (!adj.recordset.length) return res.status(400).json({ error: "Adjustment not found or already confirmed" });
+    const header = adj.recordset[0];
+    const whId = header.WarehouseId;
+    const adjDate = header.AdjustmentDate;
+    const lines = await pool.request().input("id", sql.Int, id).query(`
+      SELECT * FROM StockAdjustmentLines WHERE StockAdjustmentId=@id
+    `);
+    const trans = new sql.Transaction(pool);
+    await trans.begin();
+    try {
+      const tr = new sql.Request(trans);
+      for (const line of lines.recordset) {
+        const qtyAdjust = parseFloat(line.QuantityAdjust) || 0;
+        if (qtyAdjust === 0) continue;
+        await tr.input("warehouseId", sql.Int, whId)
+          .input("itemType", sql.Char(1), line.ItemType)
+          .input("itemId", sql.Int, line.ItemId)
+          .input("qty", sql.Decimal(18, 3), qtyAdjust)
+          .input("date", sql.Date, adjDate)
+          .input("refId", sql.Int, id)
+          .input("createdBy", sql.Int, req.user?.UserId || null)
+          .query(`
+            INSERT INTO StockTransactions (TransactionType, TransactionDate, WarehouseId, ItemType, ItemId, Quantity, ReferenceType, ReferenceId, CreatedBy)
+            VALUES ('ADJUSTMENT', @date, @warehouseId, @itemType, @itemId, @qty, 'ADJUSTMENT', @refId, @createdBy)
+          `);
+        await tr.input("warehouseId", sql.Int, whId)
+          .input("itemType", sql.Char(1), line.ItemType)
+          .input("itemId", sql.Int, line.ItemId)
+          .input("qty", sql.Decimal(18, 3), qtyAdjust)
+          .query(`
+            MERGE StockBalances AS t
+            USING (SELECT @warehouseId AS wh, @itemType AS it, @itemId AS iid) AS s
+            ON t.WarehouseId=s.wh AND t.ItemType=s.it AND t.ItemId=s.iid
+            WHEN MATCHED THEN UPDATE SET Quantity = Quantity + @qty, LastUpdatedAt = SYSDATETIME()
+            WHEN NOT MATCHED THEN INSERT (WarehouseId, ItemType, ItemId, Quantity) VALUES (@warehouseId, @itemType, @itemId, @qty);
+          `);
+      }
+      await tr.input("id", sql.Int, id).input("userId", sql.Int, req.user?.UserId || null).query(`
+        UPDATE StockAdjustments SET Status='CONFIRM', ConfirmedBy=@userId, ConfirmedAt=SYSDATETIME() WHERE StockAdjustmentId=@id
+      `);
+      await trans.commit();
+    } catch (e) {
+      await trans.rollback();
+      throw e;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to confirm adjustment" });
+  }
+});
+
+// -------- Inventory: Stock Transfers ----------
+app.get("/api/stock-transfers", auth.authMiddleware, auth.requirePermission("inventory.view"), async (req, res) => {
+  const status = (req.query.status || "").toUpperCase();
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+    let where = "1=1";
+    if (status) { request.input("status", sql.NVarChar, status); where += " AND st.Status = @status"; }
+    const result = await request.query(`
+      SELECT st.StockTransferId AS id, st.TransferNumber, st.FromWarehouseId, st.ToWarehouseId, st.TransferDate, st.Status, st.CreatedAt, st.ConfirmedAt,
+             w1.WarehouseCode AS fromCode, w1.WarehouseName AS fromName, w2.WarehouseCode AS toCode, w2.WarehouseName AS toName,
+             u1.FullName AS createdByName, u2.FullName AS confirmedByName
+      FROM StockTransfers st
+      JOIN Warehouses w1 ON w1.WarehouseId = st.FromWarehouseId
+      JOIN Warehouses w2 ON w2.WarehouseId = st.ToWarehouseId
+      LEFT JOIN Users u1 ON u1.UserId = st.CreatedBy
+      LEFT JOIN Users u2 ON u2.UserId = st.ConfirmedBy
+      WHERE ${where}
+      ORDER BY st.CreatedAt DESC
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    if (err.message && /Invalid object name/i.test(err.message)) return res.status(503).json({ error: "Run fix_inventory.sql first" });
+    res.status(500).json({ error: "Failed to fetch transfers" });
+  }
+});
+
+app.get("/api/stock-transfers/:id", auth.authMiddleware, auth.requirePermission("inventory.view"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const header = await pool.request().input("id", sql.Int, id).query(`
+      SELECT st.*, w1.WarehouseCode AS fromCode, w1.WarehouseName AS fromName, w2.WarehouseCode AS toCode, w2.WarehouseName AS toName,
+             u1.FullName AS createdByName, u2.FullName AS confirmedByName
+      FROM StockTransfers st
+      JOIN Warehouses w1 ON w1.WarehouseId = st.FromWarehouseId
+      JOIN Warehouses w2 ON w2.WarehouseId = st.ToWarehouseId
+      LEFT JOIN Users u1 ON u1.UserId = st.CreatedBy
+      LEFT JOIN Users u2 ON u2.UserId = st.ConfirmedBy
+      WHERE st.StockTransferId = @id
+    `);
+    if (!header.recordset.length) return res.status(404).json({ error: "Not found" });
+    const lines = await pool.request().input("id", sql.Int, id).query(`
+      SELECT stl.*, CASE WHEN stl.ItemType='P' THEN p.ProductCode ELSE m.MaterialCode END AS itemCode,
+             CASE WHEN stl.ItemType='P' THEN p.ProductName ELSE m.MaterialName END AS itemName
+      FROM StockTransferLines stl
+      LEFT JOIN Products p ON stl.ItemType='P' AND p.ProductId=stl.ItemId
+      LEFT JOIN Materials m ON stl.ItemType='M' AND m.MaterialId=stl.ItemId
+      WHERE stl.StockTransferId = @id
+    `);
+    const tr = header.recordset[0];
+    tr.lines = lines.recordset;
+    res.json(tr);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch transfer" });
+  }
+});
+
+app.post("/api/stock-transfers", auth.authMiddleware, auth.requirePermission("inventory.edit"), async (req, res) => {
+  const { fromWarehouseId, toWarehouseId, transferDate, notes, lines } = req.body || {};
+  if (!fromWarehouseId || !toWarehouseId || fromWarehouseId === toWarehouseId || !transferDate || !Array.isArray(lines) || !lines.length) {
+    return res.status(400).json({ error: "fromWarehouseId, toWarehouseId (different), transferDate and lines required" });
+  }
+  try {
+    const pool = await getPool();
+    const nextNum = await pool.request().query(`
+      SELECT 'TRF-' + FORMAT(GETDATE(),'yyyy') + '-' + RIGHT('000' + CAST(ISNULL(MAX(CAST(SUBSTRING(TransferNumber,10,4) AS INT)),0)+1 AS VARCHAR),4) AS num
+      FROM StockTransfers WHERE YEAR(TransferDate) = YEAR(GETDATE())
+    `);
+    const trfNumber = nextNum.recordset[0]?.num || "TRF-" + new Date().getFullYear() + "-0001";
+    const trfResult = await pool.request()
+      .input("number", sql.NVarChar, trfNumber)
+      .input("fromWh", sql.Int, fromWarehouseId)
+      .input("toWh", sql.Int, toWarehouseId)
+      .input("date", sql.Date, transferDate)
+      .input("notes", sql.NVarChar, notes || null)
+      .input("createdBy", sql.Int, req.user?.UserId || null)
+      .query(`
+        INSERT INTO StockTransfers (TransferNumber, FromWarehouseId, ToWarehouseId, TransferDate, Status, Notes, CreatedBy)
+        OUTPUT INSERTED.StockTransferId AS id
+        VALUES (@number, @fromWh, @toWh, @date, 'DRAFT', @notes, @createdBy)
+      `);
+    const trfId = trfResult.recordset[0].id;
+    for (const line of lines) {
+      await pool.request()
+        .input("trfId", sql.Int, trfId)
+        .input("itemType", sql.Char(1), line.itemType)
+        .input("itemId", sql.Int, line.itemId)
+        .input("qty", sql.Decimal(18, 3), line.quantity || 0)
+        .input("notes", sql.NVarChar, line.notes || null)
+        .query(`
+          INSERT INTO StockTransferLines (StockTransferId, ItemType, ItemId, Quantity, Notes)
+          VALUES (@trfId, @itemType, @itemId, @qty, @notes)
+        `);
+    }
+    res.status(201).json({ id: trfId, transferNumber: trfNumber });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to create transfer" });
+  }
+});
+
+app.post("/api/stock-transfers/:id/confirm", auth.authMiddleware, auth.requirePermission("inventory.confirm"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const trf = await pool.request().input("id", sql.Int, id).query(`
+      SELECT * FROM StockTransfers WHERE StockTransferId=@id AND Status='DRAFT'
+    `);
+    if (!trf.recordset.length) return res.status(400).json({ error: "Transfer not found or already confirmed" });
+    const header = trf.recordset[0];
+    const lines = await pool.request().input("id", sql.Int, id).query(`SELECT * FROM StockTransferLines WHERE StockTransferId=@id`);
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    try {
+      const tr = new sql.Request(transaction);
+      for (const line of lines.recordset) {
+        const qty = parseFloat(line.Quantity) || 0;
+        if (qty <= 0) continue;
+        await tr.input("fromWh", sql.Int, header.FromWarehouseId).input("toWh", sql.Int, header.ToWarehouseId)
+          .input("itemType", sql.Char(1), line.ItemType).input("itemId", sql.Int, line.ItemId).input("qty", sql.Decimal(18, 3), -qty)
+          .input("date", sql.Date, header.TransferDate).input("refId", sql.Int, id).input("createdBy", sql.Int, req.user?.UserId || null)
+          .query(`INSERT INTO StockTransactions (TransactionType, TransactionDate, WarehouseId, ItemType, ItemId, Quantity, ReferenceType, ReferenceId, CreatedBy)
+            VALUES ('TRANSFER_OUT', @date, @fromWh, @itemType, @itemId, @qty, 'TRANSFER', @refId, @createdBy)`);
+        await tr.input("fromWh", sql.Int, header.FromWarehouseId).input("toWh", sql.Int, header.ToWarehouseId)
+          .input("itemType", sql.Char(1), line.ItemType).input("itemId", sql.Int, line.ItemId).input("qty", sql.Decimal(18, 3), qty)
+          .input("date", sql.Date, header.TransferDate).input("refId", sql.Int, id).input("createdBy", sql.Int, req.user?.UserId || null)
+          .query(`INSERT INTO StockTransactions (TransactionType, TransactionDate, WarehouseId, ItemType, ItemId, Quantity, ReferenceType, ReferenceId, CreatedBy)
+            VALUES ('TRANSFER_IN', @date, @toWh, @itemType, @itemId, @qty, 'TRANSFER', @refId, @createdBy)`);
+        await tr.input("wh", sql.Int, header.FromWarehouseId).input("itemType", sql.Char(1), line.ItemType).input("itemId", sql.Int, line.ItemId).input("qty", sql.Decimal(18, 3), -qty)
+          .query(`MERGE StockBalances AS t USING (SELECT @wh AS w, @itemType AS it, @itemId AS iid) AS s ON t.WarehouseId=s.w AND t.ItemType=s.it AND t.ItemId=s.iid
+            WHEN MATCHED THEN UPDATE SET Quantity=Quantity+@qty, LastUpdatedAt=SYSDATETIME() WHEN NOT MATCHED THEN INSERT (WarehouseId,ItemType,ItemId,Quantity) VALUES (@wh,@itemType,@itemId,@qty)`);
+        await tr.input("wh", sql.Int, header.ToWarehouseId).input("itemType", sql.Char(1), line.ItemType).input("itemId", sql.Int, line.ItemId).input("qty", sql.Decimal(18, 3), qty)
+          .query(`MERGE StockBalances AS t USING (SELECT @wh AS w, @itemType AS it, @itemId AS iid) AS s ON t.WarehouseId=s.w AND t.ItemType=s.it AND t.ItemId=s.iid
+            WHEN MATCHED THEN UPDATE SET Quantity=Quantity+@qty, LastUpdatedAt=SYSDATETIME() WHEN NOT MATCHED THEN INSERT (WarehouseId,ItemType,ItemId,Quantity) VALUES (@wh,@itemType,@itemId,@qty)`);
+      }
+      await tr.input("id", sql.Int, id).input("userId", sql.Int, req.user?.UserId || null)
+        .query(`UPDATE StockTransfers SET Status='CONFIRM', ConfirmedBy=@userId, ConfirmedAt=SYSDATETIME() WHERE StockTransferId=@id`);
+      await transaction.commit();
+    } catch (e) {
+      await transaction.rollback();
+      throw e;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to confirm transfer" });
+  }
+});
+
+// -------- Inventory: Stock Receipts (Phiếu nhập kho NVL từ mua hàng) ----------
+app.get("/api/stock-receipts", auth.authMiddleware, auth.requirePermission("inventory.view"), async (req, res) => {
+  const warehouseId = parseIntSafe(req.query.warehouseId);
+  const purchaseOrderId = parseIntSafe(req.query.purchaseOrderId);
+  const status = (req.query.status || "").toUpperCase();
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+    const conditions = ["1=1"];
+    if (warehouseId) { request.input("warehouseId", sql.Int, warehouseId); conditions.push("sr.WarehouseId = @warehouseId"); }
+    if (purchaseOrderId) { request.input("purchaseOrderId", sql.Int, purchaseOrderId); conditions.push("sr.PurchaseOrderId = @purchaseOrderId"); }
+    if (status) { request.input("status", sql.NVarChar, status); conditions.push("sr.Status = @status"); }
+    const result = await request.query(`
+      SELECT sr.StockReceiptId AS id, sr.ReceiptNumber, sr.WarehouseId, w.WarehouseCode, w.WarehouseName, sr.PurchaseOrderId, po.PONumber, po.SupplierName,
+             sr.ReceiptDate, sr.Status, sr.CreatedAt, sr.ConfirmedAt, u1.FullName AS createdByName, u2.FullName AS confirmedByName
+      FROM StockReceipts sr
+      JOIN Warehouses w ON w.WarehouseId = sr.WarehouseId
+      LEFT JOIN PurchaseOrders po ON po.PurchaseOrderId = sr.PurchaseOrderId
+      LEFT JOIN Users u1 ON u1.UserId = sr.CreatedBy
+      LEFT JOIN Users u2 ON u2.UserId = sr.ConfirmedBy
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY sr.CreatedAt DESC
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    if (err.message && /Invalid object name/i.test(err.message)) return res.status(503).json({ error: "Run fix_stock_receipt.sql first" });
+    res.status(500).json({ error: "Failed to fetch stock receipts" });
+  }
+});
+
+app.get("/api/stock-receipts/:id", auth.authMiddleware, auth.requirePermission("inventory.view"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const header = await pool.request().input("id", sql.Int, id).query(`
+      SELECT sr.*, w.WarehouseCode, w.WarehouseName, po.PONumber, po.SupplierName, po.InvoiceNumber,
+             u1.FullName AS createdByName, u2.FullName AS confirmedByName
+      FROM StockReceipts sr
+      JOIN Warehouses w ON w.WarehouseId = sr.WarehouseId
+      LEFT JOIN PurchaseOrders po ON po.PurchaseOrderId = sr.PurchaseOrderId
+      LEFT JOIN Users u1 ON u1.UserId = sr.CreatedBy
+      LEFT JOIN Users u2 ON u2.UserId = sr.ConfirmedBy
+      WHERE sr.StockReceiptId = @id
+    `);
+    if (!header.recordset.length) return res.status(404).json({ error: "Not found" });
+    const lines = await pool.request().input("id", sql.Int, id).query(`
+      SELECT srl.*, m.MaterialCode, m.MaterialName FROM StockReceiptLines srl
+      JOIN Materials m ON m.MaterialId = srl.MaterialId
+      WHERE srl.StockReceiptId = @id
+    `);
+    const receipt = header.recordset[0];
+    receipt.lines = lines.recordset;
+    res.json(receipt);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch stock receipt" });
+  }
+});
+
+app.post("/api/stock-receipts/:id/confirm", auth.authMiddleware, auth.requirePermission("inventory.confirm"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const receipt = await pool.request().input("id", sql.Int, id).query(`
+      SELECT * FROM StockReceipts WHERE StockReceiptId=@id AND Status='DRAFT'
+    `);
+    if (!receipt.recordset.length) return res.status(400).json({ error: "Phiếu nhập kho không tồn tại hoặc đã xác nhận" });
+    const header = receipt.recordset[0];
+    const lines = await pool.request().input("id", sql.Int, id).query(`SELECT * FROM StockReceiptLines WHERE StockReceiptId=@id`);
+    if (!lines.recordset.length) return res.status(400).json({ error: "Phiếu nhập kho chưa có dòng chi tiết" });
+    const receiptDate = toDateString(header.ReceiptDate) || new Date().toISOString().slice(0, 10);
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    try {
+      for (const line of lines.recordset) {
+        const qty = parseFloat(line.Quantity) || 0;
+        if (qty <= 0) continue;
+        const tr1 = new sql.Request(transaction);
+        await tr1.input("wh1", sql.Int, header.WarehouseId).input("materialId1", sql.Int, line.MaterialId)
+          .input("qty1", sql.Decimal(18, 3), qty).input("date1", sql.Date, receiptDate)
+          .input("refId1", sql.Int, id).input("createdBy1", sql.Int, req.user?.UserId || null)
+          .query(`INSERT INTO StockTransactions (TransactionType, TransactionDate, WarehouseId, ItemType, ItemId, Quantity, ReferenceType, ReferenceId, CreatedBy)
+            VALUES ('RECEIPT', @date1, @wh1, 'M', @materialId1, @qty1, 'STOCK_RECEIPT', @refId1, @createdBy1)`);
+        const tr2 = new sql.Request(transaction);
+        await tr2.input("wh2", sql.Int, header.WarehouseId).input("itemType2", sql.Char(1), "M").input("itemId2", sql.Int, line.MaterialId).input("qty2", sql.Decimal(18, 3), qty)
+          .query(`MERGE StockBalances AS t USING (SELECT @wh2 AS w, @itemType2 AS it, @itemId2 AS iid) AS s ON t.WarehouseId=s.w AND t.ItemType=s.it AND t.ItemId=s.iid
+            WHEN MATCHED THEN UPDATE SET Quantity=Quantity+@qty2, LastUpdatedAt=SYSDATETIME() WHEN NOT MATCHED THEN INSERT (WarehouseId,ItemType,ItemId,Quantity) VALUES (@wh2,@itemType2,@itemId2,@qty2);`);
+      }
+      const tr3 = new sql.Request(transaction);
+      await tr3.input("id3", sql.Int, id).input("userId3", sql.Int, req.user?.UserId || null)
+        .query(`UPDATE StockReceipts SET Status='CONFIRM', ConfirmedBy=@userId3, ConfirmedAt=SYSDATETIME() WHERE StockReceiptId=@id3`);
+      await transaction.commit();
+    } catch (e) {
+      await transaction.rollback();
+      throw e;
+    }
+    try { io.emit("purchase:changed", { type: "stock_receipt_confirm", id: header.PurchaseOrderId || id }); } catch (notifyErr) { console.error("[Socket] Failed to emit purchase:changed", notifyErr); }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[StockReceipt Confirm Error]", err);
+    res.status(500).json({ error: "Failed to confirm stock receipt: " + (err.message || String(err)) });
+  }
+});
+
+// -------- Inventory: Stock Issues (Phiếu xuất kho bán hàng) ----------
+app.get("/api/stock-issues", auth.authMiddleware, auth.requirePermission("inventory.view"), async (req, res) => {
+  const warehouseId = parseIntSafe(req.query.warehouseId);
+  const salesOrderId = parseIntSafe(req.query.salesOrderId);
+  const status = (req.query.status || "").toUpperCase();
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+    const conditions = ["1=1"];
+    if (warehouseId) { request.input("warehouseId", sql.Int, warehouseId); conditions.push("si.WarehouseId = @warehouseId"); }
+    if (salesOrderId) { request.input("salesOrderId", sql.Int, salesOrderId); conditions.push("si.SalesOrderId = @salesOrderId"); }
+    if (status) { request.input("status", sql.NVarChar, status); conditions.push("si.Status = @status"); }
+    const result = await request.query(`
+      SELECT si.StockIssueId AS id, si.IssueNumber, si.WarehouseId, w.WarehouseCode, w.WarehouseName, si.SalesOrderId, so.InvoiceNumber, so.CustomerName,
+             si.IssueDate, si.Status, si.CreatedAt, si.ConfirmedAt, u1.FullName AS createdByName, u2.FullName AS confirmedByName
+      FROM StockIssues si
+      JOIN Warehouses w ON w.WarehouseId = si.WarehouseId
+      LEFT JOIN SalesOrders so ON so.SalesOrderId = si.SalesOrderId
+      LEFT JOIN Users u1 ON u1.UserId = si.CreatedBy
+      LEFT JOIN Users u2 ON u2.UserId = si.ConfirmedBy
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY si.CreatedAt DESC
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    if (err.message && /Invalid object name/i.test(err.message)) return res.status(503).json({ error: "Run fix_inventory.sql first" });
+    res.status(500).json({ error: "Failed to fetch stock issues" });
+  }
+});
+
+app.get("/api/stock-issues/:id", auth.authMiddleware, auth.requirePermission("inventory.view"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const header = await pool.request().input("id", sql.Int, id).query(`
+      SELECT si.*, w.WarehouseCode, w.WarehouseName, so.InvoiceNumber, so.CustomerName, so.DeliveryDate,
+             u1.FullName AS createdByName, u2.FullName AS confirmedByName
+      FROM StockIssues si
+      JOIN Warehouses w ON w.WarehouseId = si.WarehouseId
+      LEFT JOIN SalesOrders so ON so.SalesOrderId = si.SalesOrderId
+      LEFT JOIN Users u1 ON u1.UserId = si.CreatedBy
+      LEFT JOIN Users u2 ON u2.UserId = si.ConfirmedBy
+      WHERE si.StockIssueId = @id
+    `);
+    if (!header.recordset.length) return res.status(404).json({ error: "Not found" });
+    const lines = await pool.request().input("id", sql.Int, id).query(`
+      SELECT sil.*, p.ProductCode, p.ProductName FROM StockIssueLines sil
+      JOIN Products p ON p.ProductId = sil.ProductId
+      WHERE sil.StockIssueId = @id
+    `);
+    const issue = header.recordset[0];
+    issue.lines = lines.recordset;
+    res.json(issue);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch stock issue" });
+  }
+});
+
+app.post("/api/stock-issues", auth.authMiddleware, auth.requirePermission("inventory.edit"), async (req, res) => {
+  const { warehouseId, salesOrderId, issueDate, notes, lines } = req.body || {};
+  if (!warehouseId || !issueDate || !Array.isArray(lines) || !lines.length) {
+    return res.status(400).json({ error: "warehouseId, issueDate and lines required" });
+  }
+  try {
+    const pool = await getPool();
+    const nextNum = await pool.request().query(`
+      SELECT 'ISS-' + FORMAT(GETDATE(),'yyyy') + '-' + RIGHT('000' + CAST(ISNULL(MAX(CAST(SUBSTRING(IssueNumber,10,4) AS INT)),0)+1 AS VARCHAR),4) AS num
+      FROM StockIssues WHERE YEAR(IssueDate) = YEAR(GETDATE())
+    `);
+    const issueNumber = nextNum.recordset[0]?.num || "ISS-" + new Date().getFullYear() + "-0001";
+    const issueResult = await pool.request()
+      .input("number", sql.NVarChar, issueNumber)
+      .input("warehouseId", sql.Int, warehouseId)
+      .input("salesOrderId", sql.Int, salesOrderId || null)
+      .input("date", sql.Date, issueDate)
+      .input("notes", sql.NVarChar, notes || null)
+      .input("createdBy", sql.Int, req.user?.UserId || null)
+      .query(`
+        INSERT INTO StockIssues (IssueNumber, WarehouseId, SalesOrderId, IssueDate, Status, Notes, CreatedBy)
+        OUTPUT INSERTED.StockIssueId AS id
+        VALUES (@number, @warehouseId, @salesOrderId, @date, 'DRAFT', @notes, @createdBy)
+      `);
+    const issueId = issueResult.recordset[0].id;
+    for (const line of lines) {
+      await pool.request()
+        .input("issueId", sql.Int, issueId)
+        .input("productId", sql.Int, line.productId)
+        .input("qty", sql.Decimal(18, 3), line.quantity || 0)
+        .input("notes", sql.NVarChar, line.notes || null)
+        .query(`INSERT INTO StockIssueLines (StockIssueId, ProductId, Quantity, Notes) VALUES (@issueId, @productId, @qty, @notes)`);
+    }
+    res.status(201).json({ id: issueId, issueNumber });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to create stock issue" });
+  }
+});
+
+app.put("/api/stock-issues/:id", auth.authMiddleware, auth.requirePermission("inventory.edit"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  const { warehouseId, salesOrderId, issueDate, notes, lines } = req.body || {};
+  try {
+    const pool = await getPool();
+    const existing = await pool.request().input("id", sql.Int, id).query(`SELECT Status FROM StockIssues WHERE StockIssueId=@id`);
+    if (!existing.recordset.length) return res.status(404).json({ error: "Not found" });
+    if ((existing.recordset[0].Status || "").toUpperCase() !== "DRAFT") return res.status(400).json({ error: "Chỉ sửa được phiếu DRAFT" });
+    if (!warehouseId || !issueDate) return res.status(400).json({ error: "warehouseId và issueDate bắt buộc" });
+    const soVal = (salesOrderId === "" || salesOrderId === null || salesOrderId === undefined) ? null : parseInt(salesOrderId, 10);
+    const validLines = Array.isArray(lines) ? lines.filter(l => l.productId && (parseFloat(l.quantity) || 0) > 0) : [];
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    try {
+      const updReq = new sql.Request(transaction);
+      updReq.input("id", sql.Int, id).input("wh", sql.Int, parseInt(warehouseId, 10)).input("so", sql.Int, soVal)
+        .input("date", sql.Date, issueDate).input("notes", sql.NVarChar, notes || null);
+      await updReq.query(`UPDATE StockIssues SET WarehouseId=@wh, SalesOrderId=@so, IssueDate=@date, Notes=@notes WHERE StockIssueId=@id`);
+      await new sql.Request(transaction).input("id", sql.Int, id).query(`DELETE FROM StockIssueLines WHERE StockIssueId=@id`);
+      for (const line of validLines) {
+        await new sql.Request(transaction).input("issueId", sql.Int, id).input("productId", sql.Int, line.productId)
+          .input("qty", sql.Decimal(18, 3), line.quantity || 0)
+          .query(`INSERT INTO StockIssueLines (StockIssueId, ProductId, Quantity) VALUES (@issueId, @productId, @qty)`);
+      }
+      await transaction.commit();
+    } catch (e) {
+      await transaction.rollback();
+      throw e;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[StockIssue PUT Error]", err);
+    res.status(500).json({ error: "Failed to update stock issue: " + (err.message || String(err)) });
+  }
+});
+
+app.post("/api/stock-issues/:id/confirm", auth.authMiddleware, auth.requirePermission("inventory.confirm"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const issue = await pool.request().input("id", sql.Int, id).query(`
+      SELECT * FROM StockIssues WHERE StockIssueId=@id AND Status='DRAFT'
+    `);
+    if (!issue.recordset.length) return res.status(400).json({ error: "Stock issue not found or already confirmed" });
+    const header = issue.recordset[0];
+    const lines = await pool.request().input("id", sql.Int, id).query(`SELECT * FROM StockIssueLines WHERE StockIssueId=@id`);
+    if (!lines.recordset.length) return res.status(400).json({ error: "Phiếu xuất kho chưa có dòng chi tiết" });
+    const issueDate = toDateString(header.IssueDate) || new Date().toISOString().slice(0, 10);
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    try {
+      for (const line of lines.recordset) {
+        const qty = parseFloat(line.Quantity) || 0;
+        if (qty <= 0) continue;
+        const tr1 = new sql.Request(transaction);
+        await tr1.input("wh1", sql.Int, header.WarehouseId).input("productId1", sql.Int, line.ProductId)
+          .input("qty1", sql.Decimal(18, 3), -qty).input("date1", sql.Date, issueDate)
+          .input("refId1", sql.Int, id).input("createdBy1", sql.Int, req.user?.UserId || null)
+          .query(`INSERT INTO StockTransactions (TransactionType, TransactionDate, WarehouseId, ItemType, ItemId, Quantity, ReferenceType, ReferenceId, CreatedBy)
+            VALUES ('ISSUE', @date1, @wh1, 'P', @productId1, @qty1, 'STOCK_ISSUE', @refId1, @createdBy1)`);
+        const tr2 = new sql.Request(transaction);
+        await tr2.input("wh2", sql.Int, header.WarehouseId).input("itemType2", sql.Char(1), "P").input("itemId2", sql.Int, line.ProductId).input("qty2", sql.Decimal(18, 3), -qty)
+          .query(`MERGE StockBalances AS t USING (SELECT @wh2 AS w, @itemType2 AS it, @itemId2 AS iid) AS s ON t.WarehouseId=s.w AND t.ItemType=s.it AND t.ItemId=s.iid
+            WHEN MATCHED THEN UPDATE SET Quantity=Quantity+@qty2, LastUpdatedAt=SYSDATETIME() WHEN NOT MATCHED THEN INSERT (WarehouseId,ItemType,ItemId,Quantity) VALUES (@wh2,@itemType2,@itemId2,@qty2);`);
+      }
+      const tr3 = new sql.Request(transaction);
+      await tr3.input("id3", sql.Int, id).input("userId3", sql.Int, req.user?.UserId || null)
+        .query(`UPDATE StockIssues SET Status='CONFIRM', ConfirmedBy=@userId3, ConfirmedAt=SYSDATETIME() WHERE StockIssueId=@id3`);
+      await transaction.commit();
+    } catch (e) {
+      await transaction.rollback();
+      throw e;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[StockIssue Confirm Error]", err);
+    res.status(500).json({ error: "Failed to confirm stock issue: " + (err.message || String(err)) });
   }
 });
 

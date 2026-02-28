@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chi tiết phiếu nhập kho</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="/modules/assets/js/auth.js"></script>
+    <style>
+        body { background: #f8fafc; padding: 1rem; }
+        .card { border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); border: none; margin-bottom: 1rem; }
+        .card-header { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; border-radius: 16px 16px 0 0 !important; padding: 1rem 1.5rem; }
+    </style>
+</head>
+<body>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <a href="receipts.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+        <button id="btnConfirm" class="btn btn-success btn-sm d-none"><i class="bi bi-check-circle me-1"></i>Xác nhận nhập kho</button>
+    </div>
+    <div class="card">
+        <div class="card-header"><h5 class="mb-0"><i class="bi bi-box-arrow-in-down me-2"></i>Phiếu nhập kho NVL</h5></div>
+        <div class="card-body">
+            <div id="loading" class="text-center py-4 text-muted">Đang tải...</div>
+            <div id="content" class="d-none">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-3"><label class="form-label text-muted small">Số phiếu</label><p class="mb-0 fw-semibold" id="receiptNumber"></p></div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Kho nhập</label><p class="mb-0" id="warehouse"></p></div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Đơn mua hàng</label><p class="mb-0" id="poLink"></p></div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Nhà cung cấp</label><p class="mb-0" id="supplier"></p></div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Ngày nhập</label><p class="mb-0" id="receiptDate"></p></div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Trạng thái</label><p class="mb-0" id="statusBadge"></p></div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Người tạo</label><p class="mb-0" id="createdBy"></p></div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Người xác nhận</label><p class="mb-0" id="confirmedBy"></p></div>
+                </div>
+                <h6 class="mb-2">Chi tiết NVL</h6>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm">
+                        <thead><tr><th>Mã NVL</th><th>Tên NVL</th><th class="text-end">Số lượng</th></tr></thead>
+                        <tbody id="linesBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const canConfirm = window.Auth?.hasPermission?.("inventory.confirm") ?? true;
+        const urlParams = new URLSearchParams(window.location.search);
+        const receiptId = urlParams.get("id") ? parseInt(urlParams.get("id"), 10) : null;
+
+        async function fetchJson(url, opts = {}) {
+            const res = await fetch(url, opts);
+            if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
+            return res.json();
+        }
+        async function load() {
+            if (!receiptId) { document.getElementById("loading").innerHTML = "Thiếu id phiếu"; return; }
+            try {
+                const r = await fetchJson("/api/stock-receipts/" + receiptId);
+                document.getElementById("loading").classList.add("d-none");
+                document.getElementById("content").classList.remove("d-none");
+                document.getElementById("receiptNumber").textContent = r.receiptNumber || r.ReceiptNumber || "";
+                document.getElementById("warehouse").textContent = (r.warehouseCode || r.WarehouseCode || "") + " - " + (r.warehouseName || r.WarehouseName || "");
+                document.getElementById("poLink").innerHTML = r.purchaseOrderId || r.PurchaseOrderId
+                    ? `<a href="/modules/Purchase/detail.html?id=${r.purchaseOrderId || r.PurchaseOrderId}">${r.pONumber || r.PONumber || "PO #" + (r.purchaseOrderId || r.PurchaseOrderId)}</a>`
+                    : "-";
+                document.getElementById("supplier").textContent = r.supplierName || r.SupplierName || "-";
+                document.getElementById("receiptDate").textContent = r.receiptDate ? new Date(r.receiptDate).toLocaleDateString("vi-VN") : "-";
+                const status = r.status || r.Status || "";
+                document.getElementById("statusBadge").innerHTML = `<span class="badge ${status === 'CONFIRM' ? 'bg-success' : 'bg-warning text-dark'}">${status}</span>`;
+                document.getElementById("createdBy").textContent = r.createdByName || r.CreatedByName || "-";
+                document.getElementById("confirmedBy").textContent = r.confirmedByName || r.ConfirmedByName || "-";
+
+                const lines = r.lines || [];
+                document.getElementById("linesBody").innerHTML = lines.length ? lines.map(l => `
+                    <tr>
+                        <td>${l.materialCode || l.MaterialCode || ""}</td>
+                        <td>${l.materialName || l.MaterialName || ""}</td>
+                        <td class="text-end">${parseFloat(l.quantity || l.Quantity || 0).toLocaleString("en-US", {maximumFractionDigits: 3})}</td>
+                    </tr>
+                `).join("") : "<tr><td colspan='3' class='text-center text-muted'>Chưa có dòng chi tiết</td></tr>";
+
+                if (canConfirm && status === "DRAFT") {
+                    document.getElementById("btnConfirm").classList.remove("d-none");
+                }
+            } catch (err) {
+                document.getElementById("loading").innerHTML = "Lỗi: " + err.message;
+            }
+        }
+        document.getElementById("btnConfirm").onclick = async () => {
+            if (!confirm("Xác nhận hàng đã đến và nhập kho? Số dư tồn kho sẽ được cộng thêm.")) return;
+            try {
+                await fetchJson("/api/stock-receipts/" + receiptId + "/confirm", { method: "POST", headers: { "Content-Type": "application/json" } });
+                alert("Đã xác nhận nhập kho!");
+                load();
+            } catch (err) { alert("Lỗi: " + err.message); }
+        };
+        load();
+    </script>
+</body>
+</html>

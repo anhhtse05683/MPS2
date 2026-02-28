@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="bom.designTitle">Thiết kế BOM</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <script src="/modules/assets/js/auth.js"></script>
+  <script src="/modules/assets/js/i18n.js"></script>
+  <style>
+    body { background: #f8fafc; min-height: 100vh; padding: 1.5rem; }
+    .card { border-radius: 16px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); border: none; }
+    .card-header-custom { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; padding: 1.25rem 1.5rem; border-radius: 16px 16px 0 0; }
+    .table thead { background: #f1f5f9; }
+    .product-code-link { color: #2563eb; cursor: pointer; text-decoration: none; font-weight: 600; }
+    .product-code-link:hover { text-decoration: underline; }
+    .product-thumb { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; background: #e2e8f0; }
+    .bom-detail-product { display: flex; gap: 1rem; align-items: center; padding: 1rem; background: #f8fafc; border-radius: 12px; margin-bottom: 1rem; }
+    .bom-detail-product img { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; }
+    .format-num { font-variant-numeric: tabular-nums; }
+    .log-popover { max-width: 320px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-header-custom">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <h4><i class="bi bi-list-nested me-2"></i><span data-i18n="bom.designTitle">Thiết kế BOM</span></h4>
+          <small class="opacity-90" data-i18n="bom.designSubtitle">Danh sách thành phẩm - Click mã SP để xem BOM chi tiết</small>
+        </div>
+      </div>
+    </div>
+    <div class="card-body p-4">
+      <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <div class="input-group" style="width: 260px;">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input id="searchInput" type="text" class="form-control form-control-sm" placeholder="Tìm mã, tên sản phẩm...">
+          </div>
+          <button id="btnSearch" class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i><span data-i18n="common.search">Tìm</span></button>
+        </div>
+        <div class="small text-muted" id="totalInfo">-</div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th data-i18n="bom.productCode">Mã SP</th>
+              <th data-i18n="bom.productName">Tên sản phẩm</th>
+              <th data-i18n="bom.image">Hình ảnh</th>
+            </tr>
+          </thead>
+          <tbody id="productsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="small text-muted" data-i18n="common.show">Hiển thị</span>
+          <select id="limitSelect" class="form-select form-select-sm" style="width:70px;">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+          </select>
+          <span class="small text-muted">/ trang</span>
+          <span class="mx-2 text-muted">|</span>
+          <button type="button" class="btn btn-sm btn-outline-success" id="btnNewProduct"><i class="bi bi-plus-circle me-1"></i><span data-i18n="bom.newProduct">Mặt hàng mới</span></button>
+          <button type="button" class="btn btn-sm btn-outline-primary" id="btnExportExcel"><i class="bi bi-file-earmark-excel me-1"></i><span data-i18n="bom.excel">Excel</span></button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="btnDownloadTemplate"><i class="bi bi-download me-1"></i><span data-i18n="bom.downloadTemplate">Tải mẫu</span></button>
+          <button type="button" class="btn btn-sm btn-outline-info" id="btnUploadPaste"><i class="bi bi-clipboard-data me-1"></i><span data-i18n="bom.uploadPaste">Tải lên qua web</span></button>
+        </div>
+        <nav><ul id="pagination" class="pagination pagination-sm mb-0"></ul></nav>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal BOM chi tiết -->
+  <div class="modal fade" id="bomDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" data-i18n="bom.detailTitle">BOM chi tiết</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="bomProductInfo" class="bom-detail-product">
+            <!-- Product info -->
+          </div>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0" data-i18n="bom.materialList">Danh sách NVL</h6>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="btnAddMaterial"><i class="bi bi-plus me-1"></i><span data-i18n="bom.addMaterial">Thêm NVL</span></button>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead>
+                <tr>
+                  <th style="width:40px;"><input type="checkbox" id="checkAll" title="Chọn tất cả"></th>
+                  <th data-i18n="bom.materialCode">Mã NVL</th>
+                  <th data-i18n="bom.materialName">Tên NVL</th>
+                  <th data-i18n="bom.unit">Đơn vị</th>
+                  <th class="text-end" data-i18n="bom.consumePerUnit">Định mức tiêu thụ</th>
+                </tr>
+              </thead>
+              <tbody id="bomLinesBody"></tbody>
+              <tfoot id="bomAddRow" class="table-light">
+                <tr class="add-row">
+                  <td></td>
+                  <td><input type="text" class="form-control form-control-sm" id="inlineMaterialCode" placeholder="Paste mã NVL..."></td>
+                  <td><input type="text" class="form-control form-control-sm bg-light" id="inlineMaterialName" readonly placeholder="Tên tự điền"></td>
+                  <td><span id="inlineMaterialUnit" class="small text-muted">-</span></td>
+                  <td class="text-end"><input type="number" class="form-control form-control-sm text-end" id="inlineConsume" step="0.001" min="0.001" value="1" style="width:100px;"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btnCheckLog" data-bs-toggle="popover" data-bs-placement="top"><i class="bi bi-clock-history me-1"></i><span data-i18n="bom.checkLog">Check log</span></button>
+          <div>
+            <button type="button" class="btn btn-danger me-2" id="btnDeleteSelected"><i class="bi bi-trash me-1"></i><span data-i18n="bom.deleteSelected">Xóa đã chọn</span></button>
+            <button type="button" class="btn btn-primary me-2" id="btnSaveBom"><i class="bi bi-check-lg me-1"></i><span data-i18n="common.save">Lưu</span></button>
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" data-i18n="bom.close">Đóng</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal mặt hàng mới -->
+  <div class="modal fade" id="newProductModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" data-i18n="bom.newProduct">Mặt hàng mới</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label" data-i18n="bom.productCode">Mã SP</label>
+            <input type="text" id="newProductCode" class="form-control" placeholder="VD: SP001">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" data-i18n="bom.productName">Tên sản phẩm</label>
+            <input type="text" id="newProductName" class="form-control" placeholder="Tên thành phẩm">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="common.cancel">Hủy</button>
+          <button type="button" class="btn btn-primary" id="btnConfirmNewProduct" data-i18n="common.save">Lưu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal tải lên qua web (paste) -->
+  <div class="modal fade" id="uploadPasteModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" data-i18n="bom.uploadPaste">Tải lên qua web</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted" data-i18n="bom.pasteHint">Dán dữ liệu từ Excel (tab hoặc dấu phẩy). Cột: Mã thành phẩm, Mã NVL, Số lượng tiêu hao. Dòng đầu là tiêu đề.</p>
+          <textarea id="pasteData" class="form-control font-monospace" rows="12" placeholder="Mã thành phẩm	Mã NVL	Số lượng tiêu hao&#10;SP001	NVL001	1&#10;SP001	NVL002	2.5"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="common.cancel">Hủy</button>
+          <button type="button" class="btn btn-primary" id="btnConfirmPaste" data-i18n="bom.import">Nhập</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal thêm NVL -->
+  <div class="modal fade" id="addMaterialModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" data-i18n="bom.addMaterial">Thêm NVL</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label" data-i18n="bom.material">Nguyên vật liệu</label>
+            <select id="addMaterialId" class="form-select"></select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" data-i18n="bom.consumePerUnit">Định mức / 1 SP</label>
+            <input type="number" id="addConsumePerUnit" class="form-control" step="0.001" min="0.001" value="1">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="common.cancel">Hủy</button>
+          <button type="button" class="btn btn-primary" id="btnConfirmAddMaterial" data-i18n="common.add">Thêm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let currentPage = 1, totalPages = 1, totalItems = 0;
+    let currentProductId = null;
+    let bomData = { lines: [], audit: {} };
+    let materials = [];
+    let pendingDeletes = [];
+    let pendingAdds = [];
+    const canEdit = window.Auth?.hasPermission?.("product.edit") ?? true;
+
+    function formatNum(n) {
+      return Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+    }
+
+    async function fetchJson(url, opts = {}) {
+      const res = await fetch(url, opts);
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
+      return res.json();
+    }
+
+    async function loadProducts() {
+      try {
+        const params = new URLSearchParams();
+        params.append("page", currentPage);
+        params.append("limit", document.getElementById("limitSelect").value || 20);
+        const q = document.getElementById("searchInput").value.trim();
+        if (q) params.append("search", q);
+        const data = await fetchJson("/api/bom/products?" + params);
+        totalItems = data.total || 0;
+        totalPages = data.totalPages || 1;
+        renderProductsTable(data.data || []);
+        renderPagination();
+        document.getElementById("totalInfo").textContent = (window.I18n?.t("bom.total") || "Tổng") + ": " + totalItems + " " + (window.I18n?.t("bom.records") || "bản ghi");
+      } catch (err) {
+        console.error("[BOM] loadProducts failed:", err);
+        document.getElementById("productsBody").innerHTML = '<tr><td colspan="3" class="text-center text-danger">' + (err.message || "Lỗi tải dữ liệu") + "</td></tr>";
+      }
+    }
+
+    function renderProductsTable(rows) {
+      const tbody = document.getElementById("productsBody");
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">' + (window.I18n?.t("bom.noData") || "Chưa có dữ liệu") + "</td></tr>";
+        return;
+      }
+      tbody.innerHTML = rows.map(p => `
+        <tr>
+          <td><a href="#" class="product-code-link" data-id="${p.id}">${p.code || "-"}</a></td>
+          <td>${p.name || "-"}</td>
+          <td><img src="${p.imageUrl || ''}" class="product-thumb" alt="" onerror="this.style.display='none'"></td>
+        </tr>
+      `).join("");
+      tbody.querySelectorAll(".product-code-link").forEach(a => {
+        a.onclick = (e) => { e.preventDefault(); openBomDetail(parseInt(a.dataset.id)); };
+      });
+    }
+
+    function renderPagination() {
+      const ul = document.getElementById("pagination");
+      ul.innerHTML = "";
+      if (totalPages <= 1) return;
+      const add = (label, p, disabled) => {
+        const li = document.createElement("li");
+        li.className = "page-item" + (disabled ? " disabled" : "") + (p === currentPage ? " active" : "");
+        li.innerHTML = '<a class="page-link" href="#">' + label + "</a>";
+        if (!disabled && p) li.querySelector("a").onclick = (e) => { e.preventDefault(); currentPage = p; loadProducts(); };
+        ul.appendChild(li);
+      };
+      add("«", currentPage > 1 ? currentPage - 1 : null, currentPage <= 1);
+      for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2))
+          add(i, i, false);
+        else if (i === currentPage - 3 || i === currentPage + 3)
+          add("…", null, true);
+      }
+      add("»", currentPage < totalPages ? currentPage + 1 : null, currentPage >= totalPages);
+    }
+
+    async function openBomDetail(productId) {
+      currentProductId = productId;
+      pendingDeletes = [];
+      pendingAdds = [];
+      try {
+        const data = await fetchJson("/api/bom/product/" + productId);
+        bomData = data;
+        renderBomDetail(data);
+        document.getElementById("bomAddRow").style.display = canEdit ? "table-footer-group" : "none";
+        if (canEdit) {
+          document.getElementById("inlineMaterialCode").value = "";
+          document.getElementById("inlineMaterialName").value = "";
+          document.getElementById("inlineMaterialUnit").textContent = "-";
+          document.getElementById("inlineConsume").value = "1";
+          await loadMaterialsForInline();
+          setupInlineAddRow();
+        }
+        new bootstrap.Modal(document.getElementById("bomDetailModal")).show();
+      } catch (err) {
+        alert(err.message || "Lỗi tải BOM");
+      }
+    }
+
+    async function loadMaterialsForInline() {
+      try {
+        const data = await fetchJson("/api/items?type=M");
+        materials = (data || []).filter(x => (x.itemType || "") === "M");
+      } catch (e) { materials = []; }
+    }
+
+    function renderBomDetail(data) {
+      const imgUrl = data.imageUrl || "";
+      const lines = (data.lines || []).filter(l => !pendingDeletes.includes(l.id));
+      const allLines = [...lines, ...pendingAdds];
+      document.getElementById("bomProductInfo").innerHTML = `
+        ${imgUrl ? `<img src="${imgUrl}" alt="" class="rounded" style="width:64px;height:64px;object-fit:cover;" onerror="this.style.display='none'">` : '<div class="rounded bg-light d-flex align-items-center justify-content-center" style="width:64px;height:64px;"><i class="bi bi-box text-muted"></i></div>'}
+        <div>
+          <div class="fw-bold">${data.code || ""} - ${data.name || ""}</div>
+          <small class="text-muted">${allLines.length} NVL</small>
+        </div>
+      `;
+      bomData.lines = lines;
+      bomData.audit = data.audit || {};
+      const tbody = document.getElementById("bomLinesBody");
+      const rows = lines.map((l) => `
+        <tr data-id="${l.id}" data-material-id="${l.MaterialId}">
+          <td>${canEdit ? `<input type="checkbox" class="line-check" data-id="${l.id}">` : ""}</td>
+          <td>${l.code || "-"}</td>
+          <td>${l.name || "-"}</td>
+          <td>${l.unit || "PCS"}</td>
+          <td class="text-end">${canEdit ? `<input type="number" class="form-control form-control-sm text-end consume-input" data-id="${l.id}" value="${l.consumePerUnit}" step="0.001" min="0.001" style="width:100px;">` : formatNum(l.consumePerUnit)}</td>
+        </tr>
+      `).concat(pendingAdds.map((pa, i) => `
+        <tr class="pending-add" data-pending-idx="${i}">
+          <td>${canEdit ? `<input type="checkbox" class="line-check-pending" data-pending-idx="${i}">` : ""}</td>
+          <td>${pa.code || ""}</td>
+          <td>${pa.name || ""}</td>
+          <td>${pa.unit || "PCS"}</td>
+          <td class="text-end"><input type="number" class="form-control form-control-sm text-end consume-input-pending" data-pending-idx="${i}" value="${pa.consumePerUnit}" step="0.001" min="0.001" style="width:100px;"></td>
+        </tr>
+      `)).join("");
+      if (!lines.length && !pendingAdds.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">' + (window.I18n?.t("bom.noMaterials") || "Paste mã NVL vào dòng dưới cùng") + "</td></tr>";
+      } else {
+        tbody.innerHTML = rows;
+      }
+      const checkAll = document.getElementById("checkAll");
+      checkAll.checked = false;
+      checkAll.onchange = function() {
+        tbody.querySelectorAll(".line-check, .line-check-pending").forEach(cb => { cb.checked = this.checked; });
+      };
+    }
+
+    function getLogHtml() {
+      const a = bomData.audit || {};
+      const fmt = (d) => d ? new Date(d).toLocaleString("vi-VN") : "-";
+      return `
+        <div class="log-popover small">
+          <div><strong>${window.I18n?.t("bom.createdAt") || "Thời gian tạo"}:</strong> ${fmt(a.createdAt)}</div>
+          <div><strong>${window.I18n?.t("bom.createdBy") || "Người tạo"}:</strong> ${a.createdBy || "-"}</div>
+          <div class="mt-2"><strong>${window.I18n?.t("bom.updatedAt") || "Thay đổi cuối"}:</strong> ${fmt(a.updatedAt)}</div>
+          <div><strong>${window.I18n?.t("bom.updatedBy") || "Người thay đổi"}:</strong> ${a.updatedBy || "-"}</div>
+        </div>
+      `;
+    }
+
+    document.getElementById("btnCheckLog").addEventListener("click", function() {
+      const popover = bootstrap.Popover.getOrCreateInstance(this, {
+        content: getLogHtml(),
+        html: true,
+        trigger: "focus"
+      });
+      popover.toggle();
+    });
+
+    document.getElementById("btnDeleteSelected").onclick = () => {
+      const checked = Array.from(document.querySelectorAll(".line-check:checked")).map(cb => parseInt(cb.dataset.id));
+      const checkedPending = Array.from(document.querySelectorAll(".line-check-pending:checked")).map(cb => parseInt(cb.dataset.pendingIdx)).sort((a,b)=>b-a);
+      if (!checked.length && !checkedPending.length) { alert(window.I18n?.t("bom.selectToDelete") || "Chọn ít nhất một NVL để xóa"); return; }
+      pendingDeletes.push(...checked);
+      checkedPending.forEach(i => pendingAdds.splice(i, 1));
+      renderBomDetail(bomData);
+    };
+
+    document.getElementById("btnSaveBom").onclick = async () => {
+      try {
+        for (const inp of document.querySelectorAll(".consume-input")) {
+          const id = parseInt(inp.dataset.id);
+          if (pendingDeletes.includes(id)) continue;
+          const val = parseFloat(inp.value);
+          if (!isNaN(val) && val > 0) await fetchJson("/api/bom/" + id, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ consumePerUnit: val }) });
+        }
+        if (pendingDeletes.length) {
+          await fetchJson("/api/bom/delete-batch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: pendingDeletes }) });
+        }
+        for (let i = 0; i < pendingAdds.length; i++) {
+          const pa = pendingAdds[i];
+          const inpEl = document.querySelector(`.consume-input-pending[data-pending-idx="${i}"]`);
+          const consume = inpEl ? parseFloat(inpEl.value) : pa.consumePerUnit;
+          if (pa.materialId && consume > 0) {
+            await fetchJson("/api/bom", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: currentProductId, materialId: pa.materialId, consumePerUnit: consume }) });
+          }
+        }
+        if (document.querySelectorAll(".consume-input, .consume-input-pending").length || pendingDeletes.length || pendingAdds.length) {
+          alert(window.I18n?.t("common.updateSuccess") || "Đã lưu!");
+          openBomDetail(currentProductId);
+        }
+      } catch (err) { alert(err.message); }
+    };
+
+    function commitInlineAdd() {
+      const codeInp = document.getElementById("inlineMaterialCode");
+      const nameInp = document.getElementById("inlineMaterialName");
+      const consumeInp = document.getElementById("inlineConsume");
+      const code = (codeInp?.value || "").trim();
+      const consume = parseFloat(consumeInp?.value);
+      const mat = materials.find(m => ((m.code || m.MaterialCode || "").toUpperCase()) === code.toUpperCase());
+      if (!mat || !code) return;
+      if (isNaN(consume) || consume <= 0) { consumeInp?.focus(); return; }
+      const existing = new Set([...(bomData.lines || []).map(l => l.MaterialId), ...pendingAdds.map(p => p.materialId)]);
+      if (existing.has(mat.id)) { alert(window.I18n?.t("bom.materialExists") || "NVL đã có trong BOM"); return; }
+      pendingAdds.push({ materialId: mat.id, code: mat.code || mat.MaterialCode, name: mat.name || mat.MaterialName, unit: mat.unit || "PCS", consumePerUnit: consume });
+      codeInp.value = ""; nameInp.value = ""; document.getElementById("inlineMaterialUnit").textContent = "-"; consumeInp.value = "1";
+      renderBomDetail(bomData);
+    }
+
+    function setupInlineAddRow() {
+      const codeInp = document.getElementById("inlineMaterialCode");
+      const nameInp = document.getElementById("inlineMaterialName");
+      const consumeInp = document.getElementById("inlineConsume");
+      const unitEl = document.getElementById("inlineMaterialUnit");
+      if (!codeInp || !consumeInp) return;
+      codeInp.oninput = codeInp.onpaste = function() {
+        setTimeout(() => {
+          const code = (codeInp.value || "").trim();
+          const mat = materials.find(m => ((m.code || m.MaterialCode || "").toUpperCase()) === code.toUpperCase());
+          if (mat) {
+            nameInp.value = mat.name || mat.MaterialName || "";
+            unitEl.textContent = mat.unit || "PCS";
+            consumeInp.focus();
+          } else {
+            nameInp.value = ""; unitEl.textContent = "-";
+          }
+        }, 10);
+      };
+      consumeInp.onkeydown = function(e) {
+        if (e.key === "Enter") { e.preventDefault(); commitInlineAdd(); }
+      };
+    }
+
+    document.getElementById("btnAddMaterial").onclick = () => {
+      document.getElementById("inlineMaterialCode").focus();
+    };
+
+    document.getElementById("btnConfirmAddMaterial").onclick = async () => {
+      const materialId = document.getElementById("addMaterialId").value;
+      const consume = parseFloat(document.getElementById("addConsumePerUnit").value);
+      if (!materialId) { alert(window.I18n?.t("bom.selectMaterial") || "Chọn NVL"); return; }
+      if (isNaN(consume) || consume <= 0) { alert(window.I18n?.t("bom.invalidConsume") || "Định mức > 0"); return; }
+      try {
+        await fetchJson("/api/bom", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: currentProductId, materialId: parseInt(materialId), consumePerUnit: consume }) });
+        bootstrap.Modal.getInstance(document.getElementById("addMaterialModal")).hide();
+        alert(window.I18n?.t("common.createSuccess") || "Đã thêm!");
+        openBomDetail(currentProductId);
+      } catch (err) { alert(err.message); }
+    };
+
+    document.getElementById("btnNewProduct").onclick = () => {
+      document.getElementById("newProductCode").value = "";
+      document.getElementById("newProductName").value = "";
+      new bootstrap.Modal(document.getElementById("newProductModal")).show();
+    };
+
+    document.getElementById("btnConfirmNewProduct").onclick = async () => {
+      const code = document.getElementById("newProductCode").value.trim();
+      const name = document.getElementById("newProductName").value.trim();
+      if (!code || !name) { alert(window.I18n?.t("bom.enterCodeName") || "Nhập mã và tên"); return; }
+      try {
+        await fetchJson("/api/items", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "P", code, name }) });
+        bootstrap.Modal.getInstance(document.getElementById("newProductModal")).hide();
+        alert(window.I18n?.t("common.createSuccess") || "Đã tạo!");
+        loadProducts();
+      } catch (err) { alert(err.message); }
+    };
+
+    document.getElementById("btnExportExcel").onclick = () => {
+      const q = document.getElementById("searchInput").value.trim();
+      window.location.href = "/api/bom/export" + (q ? "?search=" + encodeURIComponent(q) : "");
+    };
+
+    document.getElementById("btnDownloadTemplate").onclick = () => {
+      window.location.href = "/api/bom/template";
+    };
+
+    document.getElementById("btnUploadPaste").onclick = () => {
+      document.getElementById("pasteData").value = "";
+      new bootstrap.Modal(document.getElementById("uploadPasteModal")).show();
+    };
+
+    document.getElementById("btnConfirmPaste").onclick = async () => {
+      const text = document.getElementById("pasteData").value.trim();
+      if (!text) { alert(window.I18n?.t("bom.pasteDataRequired") || "Dán dữ liệu vào"); return; }
+      try {
+        const r = await fetchJson("/api/bom/import-paste", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+        bootstrap.Modal.getInstance(document.getElementById("uploadPasteModal")).hide();
+        alert((window.I18n?.t("bom.importSuccess") || "Đã nhập {{n}} dòng").replace("{{n}}", r.inserted || 0) + (r.skipped ? ". Bỏ qua: " + r.skipped : ""));
+        loadProducts();
+      } catch (err) { alert(err.message); }
+    };
+
+    document.getElementById("btnSearch").onclick = () => { currentPage = 1; loadProducts(); };
+    document.getElementById("searchInput").onkeydown = (e) => { if (e.key === "Enter") { currentPage = 1; loadProducts(); } };
+    document.getElementById("limitSelect").onchange = () => { currentPage = 1; loadProducts(); };
+
+    if (!canEdit) {
+      document.getElementById("btnAddMaterial").style.display = "none";
+      document.getElementById("btnDeleteSelected").style.display = "none";
+      document.getElementById("btnSaveBom").style.display = "none";
+      document.getElementById("checkAll").parentElement.innerHTML = "";
+    }
+
+    loadProducts();
+  </script>
+</body>
+</html>

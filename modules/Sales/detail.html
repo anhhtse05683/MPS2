@@ -247,6 +247,10 @@
                     <input type="date" id="deliveryDate" class="form-control">
                 </div>
                 <div class="col-md-3">
+                    <label class="form-label">Kho xuất (TP)</label>
+                    <select id="warehouseId" class="form-select"><option value="">Đang tải...</option></select>
+                </div>
+                <div class="col-md-3">
                     <label class="form-label"><span data-i18n="sales.form.status">Trạng thái</span> <span class="text-danger">*</span></label>
                     <select id="status" class="form-select">
                         <option value="INITIAL" data-i18n="sales.status.INITIAL">INITIAL</option>
@@ -331,7 +335,7 @@
         // Format number
         function formatNumber(num) {
             if (num == null || num === undefined) return "0";
-            return parseFloat(num).toLocaleString("vi-VN", {
+            return parseFloat(num).toLocaleString("en-US", {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 3,
             });
@@ -340,7 +344,7 @@
         // Format currency
         function formatCurrency(num, currency = "VND") {
             if (num == null || num === undefined) return "0";
-            const formatted = parseFloat(num).toLocaleString("vi-VN", {
+            const formatted = parseFloat(num).toLocaleString("en-US", {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 0,
             });
@@ -372,6 +376,24 @@
             }
         }
 
+        // Load warehouses (kho xuất TP)
+        async function loadWarehouses() {
+            try {
+                const list = await fetchJson("/api/warehouses/list");
+                const sel = document.getElementById("warehouseId");
+                sel.innerHTML = "";
+                list.forEach(w => {
+                    const o = document.createElement("option");
+                    o.value = w.id;
+                    o.textContent = (w.code || "") + " - " + (w.name || "");
+                    sel.appendChild(o);
+                });
+                if (!sel.value && list.length) sel.value = "2";
+            } catch (err) {
+                document.getElementById("warehouseId").innerHTML = '<option value="2">WH-TP (mặc định)</option>';
+            }
+        }
+
         // Load users (filter by same department as current user; fallback to all if empty)
         async function loadUsers() {
             try {
@@ -399,6 +421,7 @@
                     Currency: "VND",
                     CreatedBy: "",
                     AssignedTo: "",
+                    WarehouseId: 2,
                 };
                 lines = [];
                 renderForm();
@@ -437,6 +460,9 @@
             document.getElementById("customerName").value = order.CustomerName || "";
             document.getElementById("customerCode").value = order.CustomerCode || "";
             document.getElementById("deliveryDate").value = order.DeliveryDate ? order.DeliveryDate.split("T")[0] : "";
+            const whSel = document.getElementById("warehouseId");
+            if (whSel && order.WarehouseId) whSel.value = order.WarehouseId;
+            else if (whSel && !whSel.value) whSel.value = "2";
             document.getElementById("status").value = order.Status || "INITIAL";
             document.getElementById("currency").value = order.Currency || "VND";
             const currentUser = window.Auth?.getUser?.();
@@ -775,6 +801,7 @@
                 customerName: document.getElementById("customerName").value.trim() || null,
                 customerCode: document.getElementById("customerCode").value.trim() || null,
                 deliveryDate: document.getElementById("deliveryDate").value || null,
+                warehouseId: document.getElementById("warehouseId").value || 2,
                 status: "INITIAL",
                 currency: document.getElementById("currency").value,
                 createdBy: (() => {
@@ -845,6 +872,7 @@
                 customerName: document.getElementById("customerName").value.trim() || null,
                 customerCode: document.getElementById("customerCode").value.trim() || null,
                 deliveryDate: document.getElementById("deliveryDate").value || null,
+                warehouseId: document.getElementById("warehouseId").value || 2,
                 status: document.getElementById("status").value,
                 currency: document.getElementById("currency").value,
                 createdBy: (() => {
@@ -901,7 +929,7 @@
         });
 
         // Initialize
-        Promise.all([loadProducts(), loadUsers()]).then(() => {
+        Promise.all([loadProducts(), loadUsers(), loadWarehouses()]).then(() => {
             loadOrder();
         });
 

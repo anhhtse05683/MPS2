@@ -256,9 +256,11 @@
                         data-i18n="purchase.form.customerCodePlaceholder" placeholder="CUST001">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label" data-i18n="purchase.form.warehouseCode">Mã kho nhận</label>
-                    <input type="text" id="warehouseCode" class="form-control"
-                        data-i18n="purchase.form.warehouseCodePlaceholder" placeholder="WH001">
+                    <label class="form-label" data-i18n="purchase.form.warehouse">Kho nhận hàng</label>
+                    <select id="warehouseCode" class="form-select">
+                        <option value="">-- Chọn kho --</option>
+                    </select>
+                    <small class="text-muted">Mặc định: WH-NVL (Kho NVL)</small>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label" data-i18n="purchase.form.currency">Đơn vị tiền tệ</label>
@@ -317,8 +319,7 @@
                             <th style="width: 12%;" data-i18n="purchase.table.quantity">Số lượng</th>
                             <th style="width: 12%;" data-i18n="purchase.table.unitPrice">Đơn giá</th>
                             <th style="width: 12%;" data-i18n="purchase.table.lineTotal">Thành tiền</th>
-                            <th style="width: 8%;" data-i18n="purchase.table.etaYear">Năm ETA</th>
-                            <th style="width: 8%;" data-i18n="purchase.table.etaWeek">Tuần ETA</th>
+                            <th style="width: 12%;" data-i18n="purchase.table.etaDate">Ngày ETA</th>
                             <th style="width: 5%;"></th>
                         </tr>
                     </thead>
@@ -346,15 +347,28 @@
         let lines = [];
         let materials = [];
         let users = [];
+        let warehouses = [];
 
         // Get order ID from URL
         const urlParams = new URLSearchParams(window.location.search);
         orderId = urlParams.get("id") ? parseInt(urlParams.get("id")) : null;
 
+        // Chuyển EtaYear/EtaWeek sang ngày (thứ 2 đầu tuần ISO) để hiển thị
+        function getDateFromYearWeek(year, week) {
+            if (!year || !week) return new Date().toISOString().slice(0, 10);
+            const jan4 = new Date(year, 0, 4);
+            const dow = jan4.getDay() || 7;
+            const firstMon = new Date(jan4);
+            firstMon.setDate(jan4.getDate() - dow + 1);
+            const d = new Date(firstMon);
+            d.setDate(firstMon.getDate() + (week - 1) * 7);
+            return d.toISOString().slice(0, 10);
+        }
+
         // Format number
         function formatNumber(num) {
             if (num == null || num === undefined) return "0";
-            return parseFloat(num).toLocaleString("vi-VN", {
+            return parseFloat(num).toLocaleString("en-US", {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 3,
             });
@@ -363,7 +377,7 @@
         // Format currency
         function formatCurrency(num, currency = "VND") {
             if (num == null || num === undefined) return "0";
-            const formatted = parseFloat(num).toLocaleString("vi-VN", {
+            const formatted = parseFloat(num).toLocaleString("en-US", {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 0,
             });
@@ -395,6 +409,28 @@
             }
         }
 
+        // Load warehouses (default NVL for purchase) - dùng WarehouseCode
+        async function loadWarehouses() {
+            const sel = document.getElementById("warehouseCode");
+            sel.innerHTML = "<option value=''>-- Chọn kho --</option>";
+            try {
+                const list = await fetchJson("/api/warehouses/list");
+                warehouses = list;
+                const nvlFirst = list.filter(w => (w.type || w.WarehouseType) === "NVL");
+                (nvlFirst.length ? nvlFirst : list).forEach(w => {
+                    const o = document.createElement("option");
+                    o.value = w.code || "";
+                    o.textContent = (w.code || "") + " - " + (w.name || "");
+                    sel.appendChild(o);
+                });
+                if (!order?.WarehouseCode && list.length) sel.value = (nvlFirst[0] || list[0])?.code || "";
+            } catch (err) {
+                console.warn("Warehouses not loaded, using default WH-NVL");
+                const o = document.createElement("option"); o.value = "WH-NVL"; o.textContent = "WH-NVL - Kho NVL"; sel.appendChild(o);
+                if (!order?.WarehouseCode) sel.value = "WH-NVL";
+            }
+        }
+
         // Load users (filter by same department as current user; fallback to all if empty)
         async function loadUsers() {
             try {
@@ -418,7 +454,7 @@
                     InvoiceNumber: "",
                     SupplierName: "",
                     CustomerCode: "",
-                    WarehouseCode: "",
+                    WarehouseCode: "WH-NVL",
                     Currency: "VND",
                     InvoiceDate: null,
                     Status: "INITIAL",
@@ -445,8 +481,7 @@
                     unit: line.Unit,
                     unitPrice: line.UnitPrice,
                     totalAmount: line.TotalAmount,
-                    etaYear: line.EtaYear,
-                    etaWeek: line.EtaWeek,
+                    etaDate: line.EtaDate ? String(line.EtaDate).slice(0, 10) : getDateFromYearWeek(line.EtaYear, line.EtaWeek),
                 }));
                 renderForm();
                 renderLines();
@@ -462,7 +497,7 @@
             document.getElementById("invoiceNumber").value = order.InvoiceNumber || "";
             document.getElementById("supplierName").value = order.SupplierName || "";
             document.getElementById("customerCode").value = order.CustomerCode || "";
-            document.getElementById("warehouseCode").value = order.WarehouseCode || "";
+            document.getElementById("warehouseCode").value = order.WarehouseCode || "WH-NVL";
             document.getElementById("currency").value = order.Currency || "VND";
             document.getElementById("invoiceDate").value = order.InvoiceDate ? order.InvoiceDate.split("T")[0] : "";
             document.getElementById("status").value = order.Status || "INITIAL";
@@ -741,33 +776,18 @@
             totalTd.textContent = formatCurrency(line.totalAmount || 0, document.getElementById("currency").value);
             tr.appendChild(totalTd);
 
-            // Năm ETA
-            const etaYearTd = document.createElement("td");
-            const etaYearInput = document.createElement("input");
-            etaYearInput.type = "number";
-            etaYearInput.className = "form-control form-control-sm";
-            etaYearInput.dataset.field = "etaYear";
-            etaYearInput.value = line.etaYear || new Date().getFullYear();
-            etaYearInput.addEventListener("change", () => {
-                line.etaYear = parseInt(etaYearInput.value) || new Date().getFullYear();
+            // Ngày ETA (ngày dự kiến nhận hàng - MPS tự tính năm/tuần)
+            const etaDateTd = document.createElement("td");
+            const etaDateInput = document.createElement("input");
+            etaDateInput.type = "date";
+            etaDateInput.className = "form-control form-control-sm";
+            etaDateInput.dataset.field = "etaDate";
+            etaDateInput.value = line.etaDate || new Date().toISOString().slice(0, 10);
+            etaDateInput.addEventListener("change", () => {
+                line.etaDate = etaDateInput.value || null;
             });
-            etaYearTd.appendChild(etaYearInput);
-            tr.appendChild(etaYearTd);
-
-            // Tuần ETA
-            const etaWeekTd = document.createElement("td");
-            const etaWeekInput = document.createElement("input");
-            etaWeekInput.type = "number";
-            etaWeekInput.className = "form-control form-control-sm";
-            etaWeekInput.dataset.field = "etaWeek";
-            etaWeekInput.value = line.etaWeek || 1;
-            etaWeekInput.min = "1";
-            etaWeekInput.max = "53";
-            etaWeekInput.addEventListener("change", () => {
-                line.etaWeek = parseInt(etaWeekInput.value) || 1;
-            });
-            etaWeekTd.appendChild(etaWeekInput);
-            tr.appendChild(etaWeekTd);
+            etaDateTd.appendChild(etaDateInput);
+            tr.appendChild(etaDateTd);
 
             // Delete button
             const deleteTd = document.createElement("td");
@@ -817,8 +837,7 @@
                 unit: "PCS",
                 unitPrice: 0,
                 totalAmount: 0,
-                etaYear: new Date().getFullYear(),
-                etaWeek: 1,
+                etaDate: new Date().toISOString().slice(0, 10),
             });
             renderLines();
         });
@@ -857,19 +876,28 @@
                     alert(msg);
                     return;
                 }
-                if (!line.etaYear || !line.etaWeek) {
-                    const msg = (window.I18n?.t("purchase.validation.etaRequired") || "Dòng {{line}}: Vui lòng nhập Năm và Tuần ETA").replace("{{line}}", i + 1);
+                if (!line.etaDate) {
+                    const msg = (window.I18n?.t("purchase.validation.etaRequired") || "Dòng {{line}}: Vui lòng chọn Ngày ETA (dự kiến nhận hàng)").replace("{{line}}", i + 1);
                     alert(msg);
                     return;
                 }
             }
+
+            // Đồng bộ giá trị từ DOM (đảm bảo ETA đã nhập được lưu kể cả khi change chưa fire)
+            document.querySelectorAll('tr.line-row[data-index]').forEach(tr => {
+                const idx = parseInt(tr.dataset.index, 10);
+                if (lines[idx]) {
+                    const etaInput = tr.querySelector('[data-field="etaDate"]');
+                    if (etaInput && etaInput.value) lines[idx].etaDate = etaInput.value;
+                }
+            });
 
             const data = {
                 poNumber: poNumber,
                 invoiceNumber: document.getElementById("invoiceNumber").value.trim() || null,
                 supplierName: document.getElementById("supplierName").value.trim() || null,
                 customerCode: document.getElementById("customerCode").value.trim() || null,
-                warehouseCode: document.getElementById("warehouseCode").value.trim() || null,
+                warehouseCode: document.getElementById("warehouseCode").value || "WH-NVL",
                 currency: document.getElementById("currency").value,
                 invoiceDate: document.getElementById("invoiceDate").value || null,
                 status: document.getElementById("status").value,
@@ -881,13 +909,12 @@
                 })(),
                 assignedTo: document.getElementById("assignedTo").value.trim() || null,
                 lines: lines.map(line => ({
-                    materialId: parseInt(line.materialId), // Ensure it's a number
+                    materialId: parseInt(line.materialId),
                     quantity: parseFloat(line.quantity) || 0,
                     unit: line.unit || "PCS",
                     unitPrice: parseFloat(line.unitPrice) || 0,
                     totalAmount: parseFloat(line.totalAmount) || 0,
-                    etaYear: parseInt(line.etaYear) || new Date().getFullYear(),
-                    etaWeek: parseInt(line.etaWeek) || 1,
+                    etaDate: line.etaDate || new Date().toISOString().slice(0, 10),
                 })),
             };
 
@@ -931,7 +958,7 @@
         });
 
         // Initialize
-        Promise.all([loadMaterials(), loadUsers()]).then(() => {
+        Promise.all([loadMaterials(), loadUsers(), loadWarehouses()]).then(() => {
             loadOrder();
         });
     </script>

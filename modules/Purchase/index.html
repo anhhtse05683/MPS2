@@ -187,7 +187,7 @@
         // Format number
         function formatNumber(num) {
             if (num == null || num === undefined) return "0";
-            return parseFloat(num).toLocaleString("vi-VN", {
+            return parseFloat(num).toLocaleString("en-US", {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 3,
             });
@@ -196,7 +196,7 @@
         // Format currency
         function formatCurrency(num, currency = "VND") {
             if (num == null || num === undefined) return "0";
-            const formatted = parseFloat(num).toLocaleString("vi-VN", {
+            const formatted = parseFloat(num).toLocaleString("en-US", {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 0,
             });

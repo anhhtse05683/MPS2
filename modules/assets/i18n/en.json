@@ -264,6 +264,7 @@
       "quantity": "Quantity",
       "unitPrice": "Unit Price",
       "lineTotal": "Line Total",
+      "etaDate": "ETA Date",
       "etaYear": "ETA Year",
       "etaWeek": "ETA Week"
     },
@@ -309,7 +310,7 @@
       "selectMaterial": "Line {{line}}: Please select Material",
       "invalidMaterial": "Line {{line}}: Invalid material",
       "quantityRequired": "Line {{line}}: Please enter Quantity > 0",
-      "etaRequired": "Line {{line}}: Please enter ETA Year and Week"
+      "etaRequired": "Line {{line}}: Please select ETA Date (expected receipt date)"
     },
     "updateSuccess": "Update successful!",
     "createSuccess": "Create successful!",

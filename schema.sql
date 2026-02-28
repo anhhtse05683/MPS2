@@ -174,7 +174,8 @@ CREATE TABLE PurchaseOrderLines (
     Unit NVARCHAR(20) DEFAULT 'PCS', -- Đơn vị
     UnitPrice DECIMAL(18,2) DEFAULT 0, -- Đơn giá
     TotalAmount DECIMAL(18,2) DEFAULT 0, -- Thành tiền
-    EtaYear SMALLINT NOT NULL, -- Expected Time of Arrival
+    EtaDate DATE NULL, -- Ngày dự kiến nhận hàng (ưu tiên, MPS tự tính năm/tuần)
+    EtaYear SMALLINT NOT NULL, -- Tự tính từ EtaDate khi lưu
     EtaWeek TINYINT NOT NULL CHECK (EtaWeek >= 1 AND EtaWeek <= 53),
     CreatedAt DATETIME2 DEFAULT SYSDATETIME(),
     UpdatedAt DATETIME2 DEFAULT SYSDATETIME(),

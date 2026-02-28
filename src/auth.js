@@ -158,6 +158,21 @@ function requirePermission(permissionCode) {
 }
 
 /**
+ * Middleware: require any of the given permissions
+ */
+function requireAnyPermission(...permissionCodes) {
+  return async (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized", code: "NO_TOKEN" });
+    }
+    for (const code of permissionCodes) {
+      if (await hasPermission(req.user.UserId, code)) return next();
+    }
+    return res.status(403).json({ error: "Forbidden", code: "NO_PERMISSION" });
+  };
+}
+
+/**
  * Ensure admin user exists (for first run)
  */
 async function ensureAdminUser() {
@@ -199,5 +214,6 @@ module.exports = {
   optionalAuthMiddleware,
   hasPermission,
   requirePermission,
+  requireAnyPermission,
   ensureAdminUser,
 };

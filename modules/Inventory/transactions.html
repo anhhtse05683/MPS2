@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lịch sử phiếu nhập/xuất kho</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="/modules/assets/js/auth.js"></script>
+    <style>
+        body { background: #f8fafc; padding: 1rem; }
+        .card { border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); border: none; }
+        .card-header { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; border-radius: 16px 16px 0 0 !important; padding: 1rem 1.5rem; }
+        .table-transactions { font-size: 0.85rem; }
+        .table-transactions th { background: #f1f5f9; font-weight: 600; white-space: nowrap; }
+        .table-transactions td { vertical-align: middle; }
+        .badge-type { font-size: 0.7rem; }
+        .qty-in { color: #059669; font-weight: 600; }
+        .qty-out { color: #dc2626; font-weight: 600; }
+        .ref-link { text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+    </div>
+    <div class="card">
+        <div class="card-header"><h5 class="mb-0"><i class="bi bi-journal-text me-2"></i>Lịch sử phiếu nhập/xuất kho</h5></div>
+        <div class="card-body">
+            <div class="row g-2 mb-3 align-items-end flex-wrap">
+                <div class="col-auto">
+                    <label class="form-label small mb-0">Kho</label>
+                    <select id="warehouseId" class="form-select form-select-sm" style="width:200px;"><option value="">Tất cả kho</option></select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-0">Mã mặt hàng</label>
+                    <input type="text" id="itemCode" class="form-control form-control-sm" style="width:140px;" placeholder="VD: SP001, NVL001">
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-0">Loại phiếu</label>
+                    <select id="transactionType" class="form-select form-select-sm" style="width:180px;">
+                        <option value="">Tất cả</option>
+                        <option value="RECEIPT">RECEIPT - Nhập mua hàng</option>
+                        <option value="PRODUCTION_IN">PRODUCTION_IN - Nhập sản xuất</option>
+                        <option value="PRODUCTION_OUT">PRODUCTION_OUT - Xuất sản xuất</option>
+                        <option value="TRANSFER_IN">TRANSFER_IN - Nhập chuyển kho</option>
+                        <option value="TRANSFER_OUT">TRANSFER_OUT - Xuất chuyển kho</option>
+                        <option value="ADJUSTMENT">ADJUSTMENT - Điều chỉnh</option>
+                        <option value="ISSUE">ISSUE - Xuất kho</option>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-0">Từ ngày</label>
+                    <input type="date" id="fromDate" class="form-control form-control-sm" style="width:150px;">
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-0">Đến ngày</label>
+                    <input type="date" id="toDate" class="form-control form-control-sm" style="width:150px;">
+                </div>
+                <div class="col-auto">
+                    <button id="btnSearch" class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i>Tìm kiếm</button>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 table-transactions">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Ngày phiếu</th>
+                            <th>Ngày tạo</th>
+                            <th>Loại phiếu</th>
+                            <th>Kho</th>
+                            <th>Loại</th>
+                            <th>Mã</th>
+                            <th>Tên</th>
+                            <th class="text-end">Số lượng</th>
+                            <th>Tham chiếu</th>
+                            <th>Người thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script>
+        const TYPE_LABELS = {
+            RECEIPT: 'Nhập mua hàng',
+            PRODUCTION_IN: 'Nhập sản xuất',
+            PRODUCTION_OUT: 'Xuất sản xuất',
+            TRANSFER_IN: 'Nhập chuyển kho',
+            TRANSFER_OUT: 'Xuất chuyển kho',
+            ADJUSTMENT: 'Điều chỉnh',
+            ISSUE: 'Xuất kho'
+        };
+        const REF_LINKS = {
+            PURCHASE_ORDER: '/modules/Purchase/detail.html?id=',
+            PRODUCTION_ORDER: '/modules/Production/index.html',
+            SALES_ORDER: '/modules/Sales/detail.html?id=',
+            STOCK_ISSUE: '/modules/Inventory/issue-detail.html?id=',
+            STOCK_RECEIPT: '/modules/Inventory/receipt-detail.html?id=',
+            ADJUSTMENT: '/modules/Inventory/adjustment-detail.html?id=',
+            TRANSFER: '/modules/Inventory/transfer-detail.html?id='
+        };
+        async function fetchJson(url, opts = {}) {
+            const res = await fetch(url, opts);
+            if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
+            return res.json();
+        }
+        async function loadWarehouses() {
+            try {
+                const list = await fetchJson("/api/warehouses/list");
+                const sel = document.getElementById("warehouseId");
+                list.forEach(w => { const o = document.createElement("option"); o.value = w.id; o.textContent = w.code + " - " + w.name; sel.appendChild(o); });
+            } catch (_) {}
+        }
+        function refLink(refType, refId) {
+            if (!refId) return '-';
+            const base = REF_LINKS[refType];
+            if (!base) return `${refType || ''} #${refId}`;
+            const url = base.includes('id=') ? base + refId : base;
+            return `<a href="${url}" class="ref-link" target="_blank">${refType || ''} #${refId}</a>`;
+        }
+        function typeLabel(t) {
+            return TYPE_LABELS[t] || t || '-';
+        }
+        async function load() {
+            try {
+                const params = new URLSearchParams();
+                const wh = document.getElementById("warehouseId").value;
+                const code = document.getElementById("itemCode").value.trim();
+                const type = document.getElementById("transactionType").value;
+                const from = document.getElementById("fromDate").value;
+                const to = document.getElementById("toDate").value;
+                if (wh) params.append("warehouseId", wh);
+                if (code) params.append("itemCode", code);
+                if (type) params.append("transactionType", type);
+                if (from) params.append("fromDate", from);
+                if (to) params.append("toDate", to);
+                params.append("limit", "500");
+                const data = await fetchJson("/api/stock-transactions?" + params);
+                const tbody = document.getElementById("tbody");
+                tbody.innerHTML = data.length ? data.map((s, i) => {
+                    const qty = parseFloat(s.quantity || 0);
+                    const isIn = qty > 0;
+                    const qtyClass = isIn ? 'qty-in' : 'qty-out';
+                    const qtySign = isIn ? '+' : '';
+                    const createdBy = s.createdByName || s.createdByUsername || (s.createdBy ? '#' + s.createdBy : '-');
+                    const createdAt = s.createdAt ? new Date(s.createdAt).toLocaleString("vi-VN") : '-';
+                    const transDate = s.transactionDate ? new Date(s.transactionDate).toLocaleDateString("vi-VN") : '-';
+                    return `<tr>
+                        <td>${i + 1}</td>
+                        <td><small>${transDate}</small></td>
+                        <td><small>${createdAt}</small></td>
+                        <td><span class="badge ${isIn ? 'bg-success' : 'bg-danger'} badge-type">${typeLabel(s.transactionType)}</span></td>
+                        <td><small>${s.warehouseCode || ''}</small></td>
+                        <td><span class="badge ${(s.itemType || '') === 'P' ? 'bg-success' : 'bg-primary'}">${(s.itemType || '') === 'P' ? 'TP' : 'NVL'}</span></td>
+                        <td><strong>${s.itemCode || ''}</strong></td>
+                        <td>${s.itemName || ''}</td>
+                        <td class="text-end ${qtyClass}">${qtySign}${qty.toLocaleString("en-US", {maximumFractionDigits: 3})}</td>
+                        <td>${refLink(s.referenceType, s.referenceId)}</td>
+                        <td><small>${createdBy}</small></td>
+                    </tr>`;
+                }).join("") : "<tr><td colspan='11' class='text-center text-muted py-4'>Không có phiếu nào</td></tr>";
+            } catch (err) {
+                document.getElementById("tbody").innerHTML = `<tr><td colspan="11" class="text-center text-danger py-4">${err.message}</td></tr>`;
+            }
+        }
+        document.getElementById("btnSearch").onclick = load;
+        loadWarehouses().then(() => {
+            load();
+        });
+    </script>
+</body>
+</html>

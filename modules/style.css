@@ -647,6 +647,50 @@ body {
   transform: scale(0.96);
 }
 
+/* Menu mở rộng (submenu) */
+.menu-submenu-toggle {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.menu-submenu-toggle .icon-nav-arrow {
+  margin-left: auto;
+  transition: transform 0.25s ease;
+}
+
+.menu-submenu-toggle.expanded .icon-nav-arrow {
+  transform: rotate(180deg);
+}
+
+.menu-submenu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.menu-submenu.expanded {
+  max-height: 300px;
+}
+
+.menu-submenu li {
+  margin: 0;
+  padding: 0;
+}
+
+.menu-sub-item {
+  padding-left: 2.75rem !important;
+  font-size: 0.9rem;
+}
+
+.menu-sub-item.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
 /* viền đỏ bên phải */
 .menu-item.enabled::after {
   content: "";

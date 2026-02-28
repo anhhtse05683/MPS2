@@ -245,7 +245,7 @@
 
                 const balTd = document.createElement('td');
                 if (it.BalanceQty != null) {
-                    balTd.innerHTML = `<span class="badge bg-light text-dark badge-opening">${Number(it.BalanceQty).toLocaleString('vi-VN')}</span>`;
+                    balTd.innerHTML = `<span class="badge bg-light text-dark badge-opening">${Number(it.BalanceQty).toLocaleString('en-US')}</span>`;
                 } else {
                     balTd.innerHTML = `<span class="text-muted small">${window.I18n?.t('product.notConfigured') || 'Chưa cấu hình'}</span>`;
                 }
@@ -254,7 +254,7 @@
                 const safetyTd = document.createElement('td');
                 if (it.itemType === 'M') {
                     if (it.SafetyStockQty != null && Number(it.SafetyStockQty) > 0) {
-                        safetyTd.innerHTML = `<span class="badge bg-warning text-dark badge-opening">${Number(it.SafetyStockQty).toLocaleString('vi-VN')}</span>`;
+                        safetyTd.innerHTML = `<span class="badge bg-warning text-dark badge-opening">${Number(it.SafetyStockQty).toLocaleString('en-US')}</span>`;
                     } else {
                         safetyTd.innerHTML = `<span class="text-muted small">${window.I18n?.t('product.notConfigured') || 'Chưa cấu hình'}</span>`;
                     }

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phiếu xuất kho</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="/modules/assets/js/auth.js"></script>
+    <style>
+        body { background: #f8fafc; padding: 1rem; }
+        .card { border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); border: none; margin-bottom: 1rem; }
+        .card-header { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; border-radius: 16px 16px 0 0 !important; padding: 1rem 1.5rem; }
+    </style>
+</head>
+<body>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <a href="issues.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+        <button id="btnSave" class="btn btn-primary btn-sm"><i class="bi bi-save me-1"></i>Lưu</button>
+    </div>
+    <div class="card">
+        <div class="card-header"><h5 class="mb-0"><i class="bi bi-box-arrow-right me-2"></i>Phiếu xuất kho bán hàng</h5></div>
+        <div class="card-body">
+            <div class="row g-3 mb-3">
+                <div class="col-md-4"><label class="form-label">Kho xuất <span class="text-danger">*</span></label><select id="warehouseId" class="form-select" required></select></div>
+                <div class="col-md-4"><label class="form-label">Đơn bán hàng</label><select id="salesOrderId" class="form-select"><option value="">-- Không liên kết --</option></select></div>
+                <div class="col-md-4"><label class="form-label">Ngày xuất <span class="text-danger">*</span></label><input type="date" id="issueDate" class="form-control" required></div>
+                <div class="col-12"><label class="form-label">Ghi chú</label><input type="text" id="notes" class="form-control" placeholder="Ghi chú"></div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0">Chi tiết (Chỉ thành phẩm)</h6>
+                <button id="btnAddLine" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus me-1"></i>Thêm dòng</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm">
+                    <thead><tr><th>Mã SP</th><th>Tên SP</th><th>Số lượng</th><th></th></tr></thead>
+                    <tbody id="linesBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script>
+        let warehouses = [], salesOrders = [], products = [], lines = [];
+        let issueId = null;
+        const urlParams = new URLSearchParams(window.location.search);
+        issueId = urlParams.get("id") ? parseInt(urlParams.get("id"), 10) : null;
+
+        async function fetchJson(url, opts = {}) {
+            const res = await fetch(url, opts);
+            if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
+            return res.json();
+        }
+        async function loadWarehouses() {
+            warehouses = await fetchJson("/api/warehouses/list");
+            const sel = document.getElementById("warehouseId");
+            sel.innerHTML = "<option value=''>-- Chọn kho --</option>";
+            const tpFirst = warehouses.filter(w => (w.type || w.WarehouseType) === "TP");
+            (tpFirst.length ? tpFirst : warehouses).forEach(w => {
+                const o = document.createElement("option"); o.value = w.id; o.textContent = (w.code || "") + " - " + (w.name || ""); sel.appendChild(o);
+            });
+            if (sel.options.length === 1) warehouses.forEach(w => { const o = document.createElement("option"); o.value = w.id; o.textContent = (w.code || "") + " - " + (w.name || ""); sel.appendChild(o); });
+        }
+        async function loadSalesOrders() {
+            salesOrders = await fetchJson("/api/sales-orders");
+            const sel = document.getElementById("salesOrderId");
+            sel.innerHTML = "<option value=''>-- Không liên kết --</option>";
+            salesOrders.forEach(so => {
+                const o = document.createElement("option");
+                o.value = so.id; o.textContent = (so.invoiceNumber || so.InvoiceNumber || so.id) + " - " + (so.customerName || so.CustomerName || "");
+                sel.appendChild(o);
+            });
+        }
+        async function loadProducts() {
+            products = await fetchJson("/api/items?type=P");
+        }
+        async function loadIssue(id) {
+            const issue = await fetchJson("/api/stock-issues/" + id);
+            document.getElementById("warehouseId").value = issue.WarehouseId || issue.warehouseId || "";
+            document.getElementById("salesOrderId").value = issue.SalesOrderId || issue.salesOrderId || "";
+            document.getElementById("issueDate").value = (issue.IssueDate || issue.issueDate) ? String(issue.IssueDate || issue.issueDate).slice(0, 10) : new Date().toISOString().slice(0, 10);
+            document.getElementById("notes").value = issue.Notes || issue.notes || "";
+            const linesData = issue.lines || [];
+            lines = linesData.map(l => ({
+                productId: l.ProductId || l.productId,
+                productCode: l.ProductCode || l.productCode,
+                productName: l.ProductName || l.productName,
+                quantity: parseFloat(l.Quantity || l.quantity || 0)
+            }));
+            renderLines();
+        }
+        function addLine(p) {
+            if (lines.some(l => l.productId === p.id)) { alert("Đã thêm rồi"); return; }
+            lines.push({ productId: p.id, productCode: p.code, productName: p.name, quantity: 0 });
+            renderLines();
+        }
+        function renderLines() {
+            const tbody = document.getElementById("linesBody");
+            tbody.innerHTML = lines.map((l, i) => `
+                <tr>
+                    <td>${l.productCode}</td>
+                    <td>${l.productName}</td>
+                    <td><input type="number" step="0.001" min="0" class="form-control form-control-sm text-end" data-idx="${i}" value="${l.quantity}"></td>
+                    <td><button class="btn btn-sm btn-outline-danger" onclick="lines.splice(${i},1);renderLines()"><i class="bi bi-trash"></i></button></td>
+                </tr>
+            `).join("");
+            tbody.querySelectorAll("input[data-idx]").forEach(inp => {
+                inp.onchange = () => { lines[parseInt(inp.dataset.idx)].quantity = parseFloat(inp.value) || 0; };
+            });
+        }
+        document.getElementById("btnAddLine").onclick = () => {
+            const code = prompt("Nhập mã sản phẩm:");
+            if (!code) return;
+            const p = products.find(i => (i.code || "").toLowerCase() === (code || "").trim().toLowerCase());
+            if (!p) { alert("Không tìm thấy: " + code); return; }
+            addLine(p);
+        };
+        document.getElementById("btnSave").onclick = async () => {
+            const warehouseId = document.getElementById("warehouseId").value;
+            const issueDate = document.getElementById("issueDate").value;
+            const salesOrderId = document.getElementById("salesOrderId").value;
+            if (!warehouseId || !issueDate) { alert("Chọn kho và ngày xuất"); return; }
+            const validLines = lines.filter(l => l.quantity > 0);
+            if (!validLines.length) { alert("Thêm ít nhất một dòng có số lượng > 0"); return; }
+            try {
+                if (issueId) {
+                    await fetchJson("/api/stock-issues/" + issueId, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            warehouseId: parseInt(warehouseId),
+                            salesOrderId: salesOrderId ? parseInt(salesOrderId) : null,
+                            issueDate,
+                            notes: document.getElementById("notes").value.trim() || null,
+                            lines: validLines.map(l => ({ productId: l.productId, quantity: l.quantity }))
+                        })
+                    });
+                    alert("Cập nhật phiếu thành công!");
+                } else {
+                    const res = await fetchJson("/api/stock-issues", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            warehouseId: parseInt(warehouseId),
+                            salesOrderId: salesOrderId ? parseInt(salesOrderId) : null,
+                            issueDate,
+                            notes: document.getElementById("notes").value.trim() || null,
+                            lines: validLines.map(l => ({ productId: l.productId, quantity: l.quantity }))
+                        })
+                    });
+                    alert("Tạo phiếu thành công: " + (res.issueNumber || res.id));
+                }
+                location.href = "issues.html";
+            } catch (err) { alert("Lỗi: " + err.message); }
+        };
+        document.getElementById("issueDate").value = new Date().toISOString().slice(0, 10);
+        Promise.all([loadWarehouses(), loadSalesOrders(), loadProducts()]).then(() => {
+            if (issueId) loadIssue(issueId);
+        });
+    </script>
+</body>
+</html>
