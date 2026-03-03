@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="history.title">Lược sử</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <script src="/modules/assets/js/auth.js"></script>
+  <script src="/modules/assets/js/i18n.js"></script>
+  <style>
+    body { background: #f8fafc; min-height: 100vh; padding: 1.5rem; }
+    .card { border-radius: 16px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); border: none; }
+    .card-header-custom { background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: white; padding: 1.25rem 1.5rem; border-radius: 16px 16px 0 0; }
+    .search-form .form-label { font-weight: 500; min-width: 140px; }
+    .search-form .form-control, .search-form .form-select { max-width: 280px; }
+    .quick-date { font-size: 0.85rem; }
+    .quick-date a { text-decoration: none; color: #64748b; }
+    .quick-date a:hover { color: #0ea5e9; }
+    .table-history { font-size: 0.85rem; }
+    .table-history th { background: #f1f5f9; font-weight: 600; white-space: nowrap; }
+    .ticket-link { color: #0ea5e9; text-decoration: none; font-weight: 500; }
+    .ticket-link:hover { text-decoration: underline; }
+    .badge-type { font-size: 0.7rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-header-custom">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <h4><i class="bi bi-clock-history me-2"></i><span data-i18n="history.title">Lược sử</span></h4>
+          <small class="opacity-90" data-i18n="history.subtitle">Tra cứu lịch sử phiếu và hành động</small>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-light btn-sm" id="btnSearch"><i class="bi bi-search me-1"></i><span data-i18n="history.search">Tìm kiếm</span> (F8)</button>
+          <button type="button" class="btn btn-outline-light btn-sm" id="btnReset"><i class="bi bi-arrow-counterclockwise me-1"></i><span data-i18n="common.reset">Nhập lại</span></button>
+        </div>
+      </div>
+    </div>
+    <div class="card-body p-4">
+      <div class="row g-3 mb-4 search-form">
+        <div class="col-12">
+          <h6 class="text-muted mb-2"><span data-i18n="history.frequentlyUsed">Thường sử dụng</span></h6>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" data-i18n="history.type">Loại</label>
+          <div class="d-flex gap-3">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="typeFilter" id="typeAll" value="" checked>
+              <label class="form-check-label" for="typeAll" data-i18n="history.typeAll">Tất cả</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="typeFilter" id="typePO" value="PO">
+              <label class="form-check-label" for="typePO">Phiếu mua</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="typeFilter" id="typeSO" value="SO">
+              <label class="form-check-label" for="typeSO">Phiếu bán</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="typeFilter" id="typeReceipt" value="RECEIPT">
+              <label class="form-check-label" for="typeReceipt">Phiếu nhập</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="typeFilter" id="typeIssue" value="ISSUE">
+              <label class="form-check-label" for="typeIssue">Phiếu xuất</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="typeFilter" id="typeAdj" value="ADJUSTMENT">
+              <label class="form-check-label" for="typeAdj">Điều chỉnh</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="typeFilter" id="typeTransfer" value="TRANSFER">
+              <label class="form-check-label" for="typeTransfer">Chuyển kho</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="typeFilter" id="typeBOM" value="BOM">
+              <label class="form-check-label" for="typeBOM">BOM</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="typeFilter" id="typePartner" value="PARTNER">
+              <label class="form-check-label" for="typePartner">Đối tác</label>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" data-i18n="history.executionDate">Ngày thực hiện</label>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <input type="date" id="fromDate" class="form-control form-control-sm" style="width:150px;">
+            <span>~</span>
+            <input type="date" id="toDate" class="form-control form-control-sm" style="width:150px;">
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" data-i18n="history.executor">Người thực hiện</label>
+          <div class="input-group" style="max-width:280px;">
+            <span class="input-group-text"><i class="bi bi-person"></i></span>
+            <input type="text" id="executor" class="form-control form-control-sm" placeholder="Tìm theo tên, mã...">
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" data-i18n="history.sortBy">Sắp xếp</label>
+          <select id="sortBy" class="form-select form-select-sm" style="width:180px;">
+            <option value="date" data-i18n="history.sortByDate">Theo ngày thực hiện</option>
+            <option value="lastmodified" data-i18n="history.sortByLastMod">Theo ngày chỉnh sửa cuối</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <div class="quick-date d-flex flex-wrap gap-2 align-items-center">
+            <span class="text-muted small" data-i18n="history.quickFilter">Nhanh:</span>
+            <a href="#" data-range="today" data-i18n="history.today">Hôm nay</a>
+            <span class="text-muted">|</span>
+            <a href="#" data-range="yesterday" data-i18n="history.yesterday">Hôm qua</a>
+            <span class="text-muted">|</span>
+            <a href="#" data-range="week" data-i18n="history.weekToToday">Đầu tuần ~ Hôm nay</a>
+            <span class="text-muted">|</span>
+            <a href="#" data-range="month" data-i18n="history.monthToToday">Đầu tháng ~ Hôm nay</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <span class="text-muted small" id="dateRangeLabel">-</span>
+        <span class="small text-muted" id="totalLabel">0 bản ghi</span>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover table-history align-middle">
+          <thead>
+            <tr>
+              <th data-i18n="history.executionDate">Ngày thực hiện</th>
+              <th data-i18n="history.ticketNumber">Số phiếu</th>
+              <th data-i18n="history.action">Hành động</th>
+              <th data-i18n="history.customerCode">Mã KH/NCC</th>
+              <th data-i18n="history.customerName">Tên KH/NCC</th>
+              <th data-i18n="history.assignedName">Người phụ trách</th>
+              <th data-i18n="history.performer">Người thực hiện</th>
+              <th data-i18n="history.status">Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+      <div id="emptyState" class="text-center text-muted py-5" style="display:none;">
+        <i class="bi bi-inbox display-4"></i>
+        <p class="mt-2" data-i18n="history.noData">Chưa có dữ liệu. Thử thay đổi điều kiện tìm kiếm.</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const typeLabels = { PO: "Phiếu mua", SO: "Phiếu bán", RECEIPT: "Phiếu nhập", ISSUE: "Phiếu xuất", ADJUSTMENT: "Điều chỉnh", TRANSFER: "Chuyển kho", BOM: "BOM", PARTNER: "Đối tác", ITEM: "Sản phẩm/NVL" };
+
+    function setDefaultDates() {
+      const today = new Date();
+      const first = new Date(today.getFullYear(), today.getMonth(), 1);
+      document.getElementById("fromDate").value = first.toISOString().slice(0, 10);
+      document.getElementById("toDate").value = today.toISOString().slice(0, 10);
+    }
+
+    async function fetchJson(url, opts = {}) {
+      const fetcher = (typeof Auth !== "undefined" && Auth.fetchWithAuth) ? Auth.fetchWithAuth.bind(Auth) : fetch;
+      const res = await fetcher(url, { ...opts, headers: { "Content-Type": "application/json", ...(opts.headers || {}) } });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
+      return res.json();
+    }
+
+    function fmtDateTime(d) {
+      if (!d) return "-";
+      const dt = new Date(d);
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, "0");
+      const day = String(dt.getDate()).padStart(2, "0");
+      const h = String(dt.getHours()).padStart(2, "0");
+      const min = String(dt.getMinutes()).padStart(2, "0");
+      const s = String(dt.getSeconds()).padStart(2, "0");
+      return `${y}-${m}-${day} ${h}:${min}:${s}`;
+    }
+
+    async function loadHistory() {
+      const from = document.getElementById("fromDate").value;
+      const to = document.getElementById("toDate").value;
+      const type = document.querySelector('input[name="typeFilter"]:checked')?.value || "";
+      const executor = document.getElementById("executor").value.trim();
+      const sortBy = document.getElementById("sortBy").value;
+
+      const params = new URLSearchParams();
+      if (from) params.append("fromDate", from);
+      if (to) params.append("toDate", to);
+      if (type) params.append("type", type);
+      if (executor) params.append("executor", executor);
+      params.append("sortBy", sortBy);
+      params.append("limit", 200);
+
+      try {
+        const data = await fetchJson("/api/history?" + params);
+        const rows = data.data || [];
+        document.getElementById("dateRangeLabel").textContent = `${data.from || from} ~ ${data.to || to}`;
+        document.getElementById("totalLabel").textContent = (data.total || rows.length) + " bản ghi";
+
+        const tbody = document.getElementById("historyBody");
+        const emptyState = document.getElementById("emptyState");
+
+        if (!rows.length) {
+          tbody.innerHTML = "";
+          emptyState.style.display = "block";
+          return;
+        }
+        emptyState.style.display = "none";
+
+        tbody.innerHTML = rows.map(r => `
+          <tr>
+            <td>${fmtDateTime(r.executionDate)}</td>
+            <td>
+              <a href="${r.detailUrl || "#"}" class="ticket-link" data-ticket-type="${r.ticketType}" data-ticket-id="${r.ticketId}">
+                ${r.ticketNumber || "-"}
+              </a>
+            </td>
+            <td><span class="badge bg-secondary badge-type">${r.action || "Mới"}</span></td>
+            <td>${r.customerCode || "-"}</td>
+            <td>${r.customerName || "-"}</td>
+            <td>${r.assignedName || "-"}</td>
+            <td>${r.performer || "-"}</td>
+            <td><span class="badge bg-${r.status === "CONFIRM" ? "success" : "secondary"}">${r.status || "-"}</span></td>
+          </tr>
+        `).join("");
+
+        tbody.querySelectorAll(".ticket-link").forEach(a => {
+          a.onclick = function(e) {
+            if (a.getAttribute("href") === "#") e.preventDefault();
+          };
+        });
+      } catch (err) {
+        document.getElementById("historyBody").innerHTML = `<tr><td colspan="8" class="text-center text-danger">${err.message || "Lỗi tải dữ liệu"}</td></tr>`;
+        document.getElementById("emptyState").style.display = "none";
+      }
+    }
+
+    document.getElementById("btnSearch").onclick = loadHistory;
+    document.getElementById("btnReset").onclick = () => {
+      setDefaultDates();
+      document.getElementById("executor").value = "";
+      document.querySelector('input[name="typeFilter"][value=""]').checked = true;
+      document.getElementById("sortBy").value = "date";
+      loadHistory();
+    };
+
+    document.querySelectorAll(".quick-date a").forEach(a => {
+      a.onclick = (e) => {
+        e.preventDefault();
+        const today = new Date();
+        let from, to;
+        switch (a.dataset.range) {
+          case "today": from = to = today; break;
+          case "yesterday": from = to = new Date(today); from.setDate(from.getDate() - 1); break;
+          case "week": from = new Date(today); from.setDate(from.getDate() - from.getDay() + 1); to = today; break;
+          case "month": from = new Date(today.getFullYear(), today.getMonth(), 1); to = today; break;
+          default: return;
+        }
+        document.getElementById("fromDate").value = from.toISOString().slice(0, 10);
+        document.getElementById("toDate").value = to.toISOString().slice(0, 10);
+        loadHistory();
+      };
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "F8") { e.preventDefault(); loadHistory(); }
+    });
+
+    setDefaultDates();
+    loadHistory();
+  </script>
+</body>
+</html>

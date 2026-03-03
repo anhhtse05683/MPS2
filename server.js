@@ -48,6 +48,35 @@ app.use("/api", (req, res, next) => {
 const parseIntSafe = (v) =>
   v === undefined || v === null || v === "" ? null : parseInt(v, 10);
 
+/** Ghi log thao tác vào ActivityLog. Bỏ qua lỗi nếu bảng chưa có. */
+async function logActivity(pool, req, opts = {}) {
+  const { menuCode, menuId, action, entityType, entityId, entitySummary, details } = opts;
+  if (!action || !entityType) return;
+  const user = req?.user;
+  const userId = user?.UserId ?? null;
+  const userName = user?.FullName || user?.Username || null;
+  try {
+    const r = pool.request()
+      .input("userId", sql.Int, userId)
+      .input("userName", sql.NVarChar, userName)
+      .input("action", sql.NVarChar, action.toUpperCase().slice(0, 20))
+      .input("entityType", sql.NVarChar, (entityType || "").slice(0, 50))
+      .input("entityId", sql.NVarChar, entityId != null ? String(entityId).slice(0, 50) : null)
+      .input("entitySummary", sql.NVarChar, (entitySummary || "").slice(0, 500))
+      .input("details", sql.NVarChar(sql.MAX), details || null);
+    let menuIdVal = menuId;
+    if (!menuIdVal && menuCode) {
+      const m = await pool.request().input("code", sql.NVarChar, menuCode).query("SELECT MenuId FROM Menus WHERE MenuCode = @code");
+      menuIdVal = m.recordset?.[0]?.MenuId ?? null;
+    }
+    r.input("menuId", sql.Int, menuIdVal);
+    await r.query(`INSERT INTO ActivityLog (UserId, UserName, MenuId, Action, EntityType, EntityId, EntitySummary, Details) 
+      VALUES (@userId, @userName, @menuId, @action, @entityType, @entityId, @entitySummary, @details)`);
+  } catch (e) {
+    if (!/Invalid object name|ActivityLog|Menus/i.test(e.message || "")) console.warn("[logActivity]", e.message);
+  }
+}
+
 /** Chuyển giá trị ngày từ DB (Date object hoặc string) sang YYYY-MM-DD. Tránh lỗi String(date).slice(0,10) cho "Fri Feb 27". */
 const toDateString = (val) => {
   if (!val) return null;
@@ -329,7 +358,13 @@ app.get("/api/bom/product/:productId", auth.requirePermission("product.view"), a
       } catch (__) {}
     }
     product.lines = lines.recordset || [];
-    product.audit = audit.recordset[0] || { createdAt: null, updatedAt: null, createdBy: null, updatedBy: null };
+    const auditRow = audit.recordset?.[0] || {};
+    product.audit = {
+      createdAt: auditRow.createdAt ?? auditRow.CreatedAt ?? null,
+      updatedAt: auditRow.updatedAt ?? auditRow.UpdatedAt ?? null,
+      createdBy: auditRow.createdBy ?? auditRow.CreatedBy ?? null,
+      updatedBy: auditRow.updatedBy ?? auditRow.UpdatedBy ?? null,
+    };
     res.json(product);
   } catch (err) {
     console.error(err);
@@ -378,7 +413,7 @@ app.post("/api/bom", auth.requirePermission("product.edit"), async (req, res) =>
     return res.status(400).json({ error: "productId and materialId are required" });
   const consume = parseFloat(consumePerUnit) || 1;
   if (consume <= 0) return res.status(400).json({ error: "consumePerUnit must be > 0" });
-  const createdBy = req.user?.fullName || req.user?.username || null;
+  const createdBy = req.user?.FullName || req.user?.Username || null;
   try {
     const pool = await getPool();
     let result;
@@ -398,7 +433,9 @@ app.post("/api/bom", auth.requirePermission("product.edit"), async (req, res) =>
           .query(`INSERT INTO BomLines (ProductId, MaterialId, ConsumePerUnit) OUTPUT INSERTED.BomLineId AS id VALUES (@productId, @materialId, @consumePerUnit)`);
       } else throw colErr;
     }
-    res.status(201).json({ id: result.recordset[0].id });
+    const newId = result.recordset[0].id;
+    await logActivity(pool, req, { menuCode: "bom-design", action: "CREATE", entityType: "BomLine", entityId: newId, entitySummary: `BOM line #${newId}` });
+    res.status(201).json({ id: newId });
   } catch (err) {
     if (err.message && /UNIQUE|duplicate|Violation of UNIQUE/i.test(err.message))
       return res.status(400).json({ error: "Định mức này đã tồn tại (trùng sản phẩm + NVL)" });
@@ -422,10 +459,11 @@ app.put("/api/bom/:id", auth.requirePermission("product.edit"), async (req, res)
     if (consume !== null) { request.input("consumePerUnit", sql.Decimal(18, 3), consume); updates.push("ConsumePerUnit = @consumePerUnit"); }
     if (!updates.length) return res.status(400).json({ error: "No fields to update" });
     updates.push("UpdatedAt = SYSDATETIME()");
-    const updatedBy = req.user?.fullName || req.user?.username || null;
+    const updatedBy = req.user?.FullName || req.user?.Username || null;
     request.input("updatedBy", sql.NVarChar, updatedBy);
     updates.push("UpdatedBy = @updatedBy");
     await request.query(`UPDATE BomLines SET ${updates.join(", ")} WHERE BomLineId = @id`);
+    await logActivity(pool, req, { menuCode: "bom-design", action: "UPDATE", entityType: "BomLine", entityId: id, entitySummary: `BOM line #${id}` });
     res.json({ ok: true });
   } catch (err) {
     if (err.message && /UNIQUE|duplicate|Violation of UNIQUE/i.test(err.message))
@@ -441,6 +479,26 @@ app.delete("/api/bom/:id", auth.requirePermission("product.edit"), async (req, r
   try {
     const pool = await getPool();
     await pool.request().input("id", sql.Int, id).query(`DELETE FROM BomLines WHERE BomLineId = @id`);
+    await logActivity(pool, req, { menuCode: "bom-design", action: "DELETE", entityType: "BomLine", entityId: id, entitySummary: `BOM line #${id}` });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to delete BOM" });
+  }
+});
+
+// Xóa NVL khỏi BOM theo productId + materialId (tiện cho API bên ngoài)
+app.delete("/api/bom/product/:productId/material/:materialId", auth.requirePermission("product.edit"), async (req, res) => {
+  const productId = parseIntSafe(req.params.productId);
+  const materialId = parseIntSafe(req.params.materialId);
+  if (!productId || !materialId) return res.status(400).json({ error: "productId and materialId are required" });
+  try {
+    const pool = await getPool();
+    await pool.request()
+      .input("productId", sql.Int, productId)
+      .input("materialId", sql.Int, materialId)
+      .query(`DELETE FROM BomLines WHERE ProductId = @productId AND MaterialId = @materialId`);
+    await logActivity(pool, req, { menuCode: "bom-design", action: "DELETE", entityType: "BomLine", entityId: `${productId}-${materialId}`, entitySummary: `BOM P${productId}/M${materialId}` });
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -457,6 +515,7 @@ app.post("/api/bom/delete-batch", auth.requirePermission("product.edit"), async 
     const pool = await getPool();
     for (const id of validIds) {
       await pool.request().input("id", sql.Int, id).query(`DELETE FROM BomLines WHERE BomLineId = @id`);
+      await logActivity(pool, req, { menuCode: "bom-design", action: "DELETE", entityType: "BomLine", entityId: id, entitySummary: `BOM line #${id}` });
     }
     res.json({ ok: true, deleted: validIds.length });
   } catch (err) {
@@ -568,6 +627,86 @@ app.post("/api/bom/import-paste", auth.requirePermission("product.edit"), async 
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || "Failed to import" });
+  }
+});
+
+// -------- History / Lược sử (từ ActivityLog) ----------
+const ENTITY_TO_TICKET = { PurchaseOrder: "PO", SalesOrder: "SO", StockReceipt: "RECEIPT", StockIssue: "ISSUE", StockAdjustment: "ADJUSTMENT", StockTransfer: "TRANSFER", BomLine: "BOM", Partner: "PARTNER", Item: "ITEM" };
+const ACTION_LABELS = { CREATE: "Thêm", UPDATE: "Sửa", DELETE: "Xóa" };
+
+app.get("/api/history", auth.authMiddleware, async (req, res) => {
+  const fromDate = req.query.fromDate || req.query.from;
+  const toDate = req.query.toDate || req.query.to;
+  const ticketType = (req.query.type || "").toUpperCase();
+  const executor = (req.query.executor || "").trim();
+  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
+  let from = fromDate ? new Date(fromDate) : new Date(new Date().setDate(1));
+  let to = toDate ? new Date(toDate) : new Date();
+  if (isNaN(from.getTime())) from = new Date(new Date().setDate(1));
+  if (isNaN(to.getTime())) to = new Date();
+  const fromStr = from.toISOString().slice(0, 10);
+  const toStr = to.toISOString().slice(0, 10);
+
+  try {
+    const pool = await getPool();
+    const request = pool.request()
+      .input("from", sql.Date, fromStr)
+      .input("to", sql.Date, toStr)
+      .input("limit", sql.Int, limit);
+    if (executor) request.input("executor", sql.NVarChar, `%${executor}%`);
+
+    const entityFilter = ticketType ? (() => {
+      const map = { PO: "PurchaseOrder", SO: "SalesOrder", RECEIPT: "StockReceipt", ISSUE: "StockIssue", ADJUSTMENT: "StockAdjustment", TRANSFER: "StockTransfer", BOM: "BomLine", PARTNER: "Partner", ITEM: "Item" };
+      return map[ticketType] || null;
+    })() : null;
+    if (entityFilter) request.input("entityType", sql.NVarChar, entityFilter);
+
+    const sqlQuery = `
+      SELECT TOP (@limit)
+        al.LogAt AS executionDate,
+        al.EntityId AS ticketId,
+        al.EntitySummary AS ticketNumber,
+        al.Action,
+        al.EntityType,
+        al.UserName AS performer,
+        m.DetailUrlPattern,
+        m.MenuCode
+      FROM ActivityLog al
+      LEFT JOIN Menus m ON m.MenuId = al.MenuId
+      WHERE CAST(al.LogAt AS DATE) BETWEEN @from AND @to
+        ${executor ? "AND al.UserName LIKE @executor" : ""}
+        ${entityFilter ? "AND al.EntityType = @entityType" : ""}
+      ORDER BY al.LogAt DESC
+    `;
+
+    const result = await request.query(sqlQuery);
+    const rows = (result.recordset || []).map(r => {
+      const tt = ENTITY_TO_TICKET[r.EntityType] || r.EntityType || "-";
+      const detailUrl = (r.DetailUrlPattern || "").trim() && r.ticketId
+        ? (r.DetailUrlPattern + r.ticketId)
+        : (tt === "PO" ? `/modules/Purchase/detail.html?id=${r.ticketId}` : tt === "SO" ? `/modules/Sales/detail.html?id=${r.ticketId}` : tt === "BOM" ? "/modules/BOM/design.html" : "#");
+      return {
+        ticketType: tt,
+        ticketId: r.ticketId,
+        ticketNumber: r.ticketNumber || `#${r.ticketId}`,
+        executionDate: r.executionDate,
+        action: ACTION_LABELS[r.Action] || r.Action,
+        customerCode: "-",
+        customerName: "-",
+        assignedName: "-",
+        performer: r.performer || "-",
+        status: "-",
+        detailUrl,
+      };
+    });
+
+    res.json({ data: rows, total: rows.length, from: fromStr, to: toStr });
+  } catch (err) {
+    if (err.message && /Invalid object name 'ActivityLog'|Invalid object name 'Menus'/i.test(err.message)) {
+      return res.status(503).json({ error: "Chạy fix_activity_log.sql trước" });
+    }
+    console.error("[History API]", err);
+    res.status(500).json({ error: err.message || "Failed to fetch history" });
   }
 });
 
@@ -975,6 +1114,8 @@ app.post("/api/items", auth.requirePermission("product.edit"), async (req, res) 
         `);
     }
 
+    const entityType = itemType === "M" ? "Material" : "Product";
+    await logActivity(pool, req, { menuCode: "items", action: "CREATE", entityType, entityId: newId, entitySummary: code ? `${code}` : `${entityType} #${newId}` });
     res.status(201).json({ id: newId });
   } catch (err) {
     console.error("[Items API Create Error]", err);
@@ -1040,6 +1181,8 @@ app.put("/api/items/:type/:id", auth.requirePermission("product.edit"), async (r
         `);
     }
 
+    const itemType = req.params.type?.toUpperCase() === "M" ? "Material" : "Product";
+    await logActivity(pool, req, { menuCode: "items", action: "UPDATE", entityType: itemType, entityId: itemId, entitySummary: `${itemType} #${itemId}` });
     res.json({ ok: true });
   } catch (err) {
     console.error("[Items API Update Error]", err);
@@ -1068,6 +1211,8 @@ app.delete("/api/items/:type/:id", auth.requirePermission("product.edit"), async
     } else {
       await request.query(`DELETE FROM Materials WHERE MaterialId = @id;`);
     }
+    const entityType = itemType === "P" ? "Product" : "Material";
+    await logActivity(pool, req, { menuCode: "items", action: "DELETE", entityType, entityId: itemId, entitySummary: `${entityType} #${itemId}` });
     res.json({ ok: true });
   } catch (err) {
     console.error("[Items API Delete Error]", err);
@@ -1685,6 +1830,7 @@ app.post("/api/purchase-orders", auth.requirePermission("purchase.add"), async (
       console.error("[Socket] Failed to emit purchase:changed (create)", notifyErr);
     }
 
+    await logActivity(pool, req, { menuCode: "purchase", action: "CREATE", entityType: "PurchaseOrder", entityId: poId, entitySummary: poNumber ? `PO ${poNumber}` : `Phiếu mua #${poId}` });
     res.status(201).json({ id: poId });
   } catch (err) {
     console.error("[PurchaseOrders Create Error]", err);
@@ -1897,6 +2043,7 @@ app.put("/api/purchase-orders/:id", auth.requirePermission("purchase.edit"), asy
       console.error("[Socket] Failed to emit purchase:changed (update)", notifyErr);
     }
 
+    await logActivity(pool, req, { menuCode: "purchase", action: "UPDATE", entityType: "PurchaseOrder", entityId: id, entitySummary: `Phiếu mua #${id}` });
     res.json({ ok: true });
   } catch (err) {
     console.error("[PurchaseOrders Update Error]", err);
@@ -1928,6 +2075,7 @@ app.delete("/api/purchase-orders/:id", auth.requirePermission("purchase.delete")
       console.error("[Socket] Failed to emit purchase:changed (delete)", notifyErr);
     }
 
+    await logActivity(pool, req, { menuCode: "purchase", action: "DELETE", entityType: "PurchaseOrder", entityId: id, entitySummary: `Phiếu mua #${id}` });
     res.json({ ok: true });
   } catch (err) {
     console.error("[PurchaseOrders Delete Error]", err);
@@ -2158,6 +2306,8 @@ app.post("/api/sales-orders", auth.requirePermission("sales.add"), async (req, r
       console.error("[Socket] Failed to emit sales:changed (create)", notifyErr);
     }
 
+    const soSummary = req.body?.invoiceNumber ? `SO ${req.body.invoiceNumber}` : `Phiếu bán #${soId}`;
+    await logActivity(pool, req, { menuCode: "sales", action: "CREATE", entityType: "SalesOrder", entityId: soId, entitySummary: soSummary });
     res.status(201).json({ id: soId });
   } catch (err) {
     console.error("[SalesOrders Create Error]", err);
@@ -2333,6 +2483,7 @@ app.put("/api/sales-orders/:id", auth.requirePermission("sales.edit"), async (re
       console.error("[Socket] Failed to emit sales:changed (update)", notifyErr);
     }
 
+    await logActivity(pool, req, { menuCode: "sales", action: "UPDATE", entityType: "SalesOrder", entityId: id, entitySummary: `Phiếu bán #${id}` });
     res.json({ ok: true });
   } catch (err) {
     console.error("[SalesOrders Update Error]", err);
@@ -2357,6 +2508,7 @@ app.delete("/api/sales-orders/:id", auth.requirePermission("sales.delete"), asyn
     } catch (notifyErr) {
       console.error("[Socket] Failed to emit sales:changed (delete)", notifyErr);
     }
+    await logActivity(pool, req, { menuCode: "sales", action: "DELETE", entityType: "SalesOrder", entityId: id, entitySummary: `Phiếu bán #${id}` });
     res.json({ ok: true });
   } catch (err) {
     console.error("[SalesOrders Delete Error]", err);
@@ -2575,7 +2727,9 @@ app.post("/api/partners", auth.requirePermission("partners.add"), async (req, re
         OUTPUT INSERTED.PartnerId AS id
         VALUES (@code, @name, @type, @taxCode, @representative, @phone, @email, @address, @createdBy);
       `);
-    res.status(201).json({ id: result.recordset[0].id });
+    const partnerId = result.recordset[0].id;
+    await logActivity(pool, req, { menuCode: "partners", action: "CREATE", entityType: "Partner", entityId: partnerId, entitySummary: name ? `${code} - ${name}` : `Partner #${partnerId}` });
+    res.status(201).json({ id: partnerId });
   } catch (err) {
     if (err.message && /UNIQUE|duplicate/i.test(err.message))
       return res.status(400).json({ error: "Partner code already exists for this type" });
@@ -2620,6 +2774,7 @@ app.put("/api/partners/:id", auth.requirePermission("partners.edit"), async (req
           UpdatedAt = SYSDATETIME()
       WHERE PartnerId = @id;
     `);
+    await logActivity(pool, req, { menuCode: "partners", action: "UPDATE", entityType: "Partner", entityId: id, entitySummary: `Partner #${id}` });
     res.json({ ok: true });
   } catch (err) {
     if (err.message && /UNIQUE|duplicate/i.test(err.message))
@@ -2635,6 +2790,7 @@ app.delete("/api/partners/:id", auth.requirePermission("partners.delete"), async
   try {
     const pool = await getPool();
     await pool.request().input("id", sql.Int, id).query(`DELETE FROM Partners WHERE PartnerId = @id;`);
+    await logActivity(pool, req, { menuCode: "partners", action: "DELETE", entityType: "Partner", entityId: id, entitySummary: `Partner #${id}` });
     res.json({ ok: true });
   } catch (err) {
     console.error("[Partners API Error]", err);
@@ -3375,6 +3531,7 @@ app.post("/api/stock-adjustments", auth.authMiddleware, auth.requirePermission("
           VALUES (@adjId, @itemType, @itemId, @qtyBefore, @qtyAdjust, @qtyAfter, @notes)
         `);
     }
+    await logActivity(pool, req, { menuCode: "stock-adjustment", action: "CREATE", entityType: "StockAdjustment", entityId: adjId, entitySummary: adjNumber });
     res.status(201).json({ id: adjId, adjustmentNumber: adjNumber });
   } catch (err) {
     res.status(500).json({ error: "Failed to create adjustment" });
@@ -3434,6 +3591,7 @@ app.post("/api/stock-adjustments/:id/confirm", auth.authMiddleware, auth.require
       await trans.rollback();
       throw e;
     }
+    await logActivity(pool, req, { menuCode: "stock-adjustment", action: "UPDATE", entityType: "StockAdjustment", entityId: id, entitySummary: `Phiếu điều chỉnh #${id} (xác nhận)` });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: "Failed to confirm adjustment" });
@@ -3536,6 +3694,7 @@ app.post("/api/stock-transfers", auth.authMiddleware, auth.requirePermission("in
           VALUES (@trfId, @itemType, @itemId, @qty, @notes)
         `);
     }
+    await logActivity(pool, req, { menuCode: "stock-transfer", action: "CREATE", entityType: "StockTransfer", entityId: trfId, entitySummary: trfNumber });
     res.status(201).json({ id: trfId, transferNumber: trfNumber });
   } catch (err) {
     res.status(500).json({ error: "Failed to create transfer" });
@@ -3584,6 +3743,7 @@ app.post("/api/stock-transfers/:id/confirm", auth.authMiddleware, auth.requirePe
       await transaction.rollback();
       throw e;
     }
+    await logActivity(pool, req, { menuCode: "stock-transfer", action: "UPDATE", entityType: "StockTransfer", entityId: id, entitySummary: `Phiếu chuyển kho #${id} (xác nhận)` });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: "Failed to confirm transfer" });
@@ -3688,6 +3848,7 @@ app.post("/api/stock-receipts/:id/confirm", auth.authMiddleware, auth.requirePer
       throw e;
     }
     try { io.emit("purchase:changed", { type: "stock_receipt_confirm", id: header.PurchaseOrderId || id }); } catch (notifyErr) { console.error("[Socket] Failed to emit purchase:changed", notifyErr); }
+    await logActivity(pool, req, { menuCode: "stock-receipt", action: "UPDATE", entityType: "StockReceipt", entityId: id, entitySummary: `Phiếu nhập #${id} (xác nhận)` });
     res.json({ ok: true });
   } catch (err) {
     console.error("[StockReceipt Confirm Error]", err);
@@ -3787,6 +3948,7 @@ app.post("/api/stock-issues", auth.authMiddleware, auth.requirePermission("inven
         .input("notes", sql.NVarChar, line.notes || null)
         .query(`INSERT INTO StockIssueLines (StockIssueId, ProductId, Quantity, Notes) VALUES (@issueId, @productId, @qty, @notes)`);
     }
+    await logActivity(pool, req, { menuCode: "stock-issue", action: "CREATE", entityType: "StockIssue", entityId: issueId, entitySummary: `${issueNumber}` });
     res.status(201).json({ id: issueId, issueNumber });
   } catch (err) {
     res.status(500).json({ error: "Failed to create stock issue" });
@@ -3823,6 +3985,7 @@ app.put("/api/stock-issues/:id", auth.authMiddleware, auth.requirePermission("in
       await transaction.rollback();
       throw e;
     }
+    await logActivity(pool, req, { menuCode: "stock-issue", action: "UPDATE", entityType: "StockIssue", entityId: id, entitySummary: `Phiếu xuất #${id}` });
     res.json({ ok: true });
   } catch (err) {
     console.error("[StockIssue PUT Error]", err);
@@ -3868,6 +4031,7 @@ app.post("/api/stock-issues/:id/confirm", auth.authMiddleware, auth.requirePermi
       await transaction.rollback();
       throw e;
     }
+    await logActivity(pool, req, { menuCode: "stock-issue", action: "UPDATE", entityType: "StockIssue", entityId: id, entitySummary: `Phiếu xuất #${id} (xác nhận)` });
     res.json({ ok: true });
   } catch (err) {
     console.error("[StockIssue Confirm Error]", err);

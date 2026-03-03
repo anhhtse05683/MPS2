@@ -20,6 +20,9 @@
     .bom-detail-product img { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; }
     .format-num { font-variant-numeric: tabular-nums; }
     .log-popover { max-width: 320px; }
+    .table-grid-input tbody tr.tr-odd { background-color: #fafafa; }
+    .table-grid-input tbody tr.tr-even { background-color: #fff; }
+    .table-grid-input tbody tr.grid-input-first-line { background-color: #e8f4fd; outline: 1px solid #0d6efd; outline-offset: -1px; }
   </style>
 </head>
 <body>
@@ -94,7 +97,7 @@
             <button type="button" class="btn btn-sm btn-outline-primary" id="btnAddMaterial"><i class="bi bi-plus me-1"></i><span data-i18n="bom.addMaterial">Thêm NVL</span></button>
           </div>
           <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle">
+            <table class="table table-sm table-hover align-middle table-grid-input table-bordered">
               <thead>
                 <tr>
                   <th style="width:40px;"><input type="checkbox" id="checkAll" title="Chọn tất cả"></th>
@@ -105,15 +108,6 @@
                 </tr>
               </thead>
               <tbody id="bomLinesBody"></tbody>
-              <tfoot id="bomAddRow" class="table-light">
-                <tr class="add-row">
-                  <td></td>
-                  <td><input type="text" class="form-control form-control-sm" id="inlineMaterialCode" placeholder="Paste mã NVL..."></td>
-                  <td><input type="text" class="form-control form-control-sm bg-light" id="inlineMaterialName" readonly placeholder="Tên tự điền"></td>
-                  <td><span id="inlineMaterialUnit" class="small text-muted">-</span></td>
-                  <td class="text-end"><input type="number" class="form-control form-control-sm text-end" id="inlineConsume" step="0.001" min="0.001" value="1" style="width:100px;"></td>
-                </tr>
-              </tfoot>
             </table>
           </div>
         </div>
@@ -209,6 +203,8 @@
     let materials = [];
     let pendingDeletes = [];
     let pendingAdds = [];
+    let emptyRowsCount = 2;
+    let focusedRowKey = null;
     const canEdit = window.Auth?.hasPermission?.("product.edit") ?? true;
 
     function formatNum(n) {
@@ -216,7 +212,8 @@
     }
 
     async function fetchJson(url, opts = {}) {
-      const res = await fetch(url, opts);
+      const fetcher = (typeof Auth !== "undefined" && Auth.fetchWithAuth) ? Auth.fetchWithAuth.bind(Auth) : fetch;
+      const res = await fetcher(url, { ...opts, headers: { "Content-Type": "application/json", ...(opts.headers || {}) } });
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
       return res.json();
     }
@@ -283,20 +280,14 @@
       currentProductId = productId;
       pendingDeletes = [];
       pendingAdds = [];
+      emptyRowsCount = 2;
+      focusedRowKey = null;
       try {
         const data = await fetchJson("/api/bom/product/" + productId);
         bomData = data;
+        if (canEdit) await loadMaterialsForInline();
         renderBomDetail(data);
-        document.getElementById("bomAddRow").style.display = canEdit ? "table-footer-group" : "none";
-        if (canEdit) {
-          document.getElementById("inlineMaterialCode").value = "";
-          document.getElementById("inlineMaterialName").value = "";
-          document.getElementById("inlineMaterialUnit").textContent = "-";
-          document.getElementById("inlineConsume").value = "1";
-          await loadMaterialsForInline();
-          setupInlineAddRow();
-        }
-        new bootstrap.Modal(document.getElementById("bomDetailModal")).show();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById("bomDetailModal")).show();
       } catch (err) {
         alert(err.message || "Lỗi tải BOM");
       }
@@ -323,54 +314,104 @@
       bomData.lines = lines;
       bomData.audit = data.audit || {};
       const tbody = document.getElementById("bomLinesBody");
-      const rows = lines.map((l) => `
-        <tr data-id="${l.id}" data-material-id="${l.MaterialId}">
+      let rowIdx = 0;
+      const rowClass = () => {
+        const odd = rowIdx % 2 === 0;
+        rowIdx++;
+        return odd ? "tr-odd" : "tr-even";
+      };
+      const lineRows = lines.map((l) => {
+        const key = "line-" + l.id;
+        const fc = focusedRowKey === key ? " grid-input-first-line" : "";
+        return `<tr class="${rowClass()}${fc}" data-key="${key}" data-id="${l.id}" data-material-id="${l.MaterialId}">
           <td>${canEdit ? `<input type="checkbox" class="line-check" data-id="${l.id}">` : ""}</td>
           <td>${l.code || "-"}</td>
           <td>${l.name || "-"}</td>
           <td>${l.unit || "PCS"}</td>
           <td class="text-end">${canEdit ? `<input type="number" class="form-control form-control-sm text-end consume-input" data-id="${l.id}" value="${l.consumePerUnit}" step="0.001" min="0.001" style="width:100px;">` : formatNum(l.consumePerUnit)}</td>
-        </tr>
-      `).concat(pendingAdds.map((pa, i) => `
-        <tr class="pending-add" data-pending-idx="${i}">
+        </tr>`;
+      });
+      const pendingRows = pendingAdds.map((pa, i) => {
+        const key = "pending-" + i;
+        const fc = focusedRowKey === key ? " grid-input-first-line" : "";
+        return `<tr class="pending-add ${rowClass()}${fc}" data-key="${key}" data-pending-idx="${i}">
           <td>${canEdit ? `<input type="checkbox" class="line-check-pending" data-pending-idx="${i}">` : ""}</td>
           <td>${pa.code || ""}</td>
           <td>${pa.name || ""}</td>
           <td>${pa.unit || "PCS"}</td>
           <td class="text-end"><input type="number" class="form-control form-control-sm text-end consume-input-pending" data-pending-idx="${i}" value="${pa.consumePerUnit}" step="0.001" min="0.001" style="width:100px;"></td>
-        </tr>
-      `)).join("");
-      if (!lines.length && !pendingAdds.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">' + (window.I18n?.t("bom.noMaterials") || "Paste mã NVL vào dòng dưới cùng") + "</td></tr>";
+        </tr>`;
+      });
+      const emptyRows = [];
+      for (let i = 0; i < emptyRowsCount; i++) {
+        const key = "empty-" + i;
+        const fc = focusedRowKey === key ? " grid-input-first-line" : "";
+        if (!canEdit) break;
+        emptyRows.push(`<tr class="empty-row ${rowClass()}${fc}" data-key="${key}" data-empty-idx="${i}">
+          <td></td>
+          <td><input type="text" class="form-control form-control-sm empty-row-code" data-empty-idx="${i}" placeholder="Paste mã NVL..."></td>
+          <td><input type="text" class="form-control form-control-sm bg-light empty-row-name" data-empty-idx="${i}" readonly placeholder="Tên tự điền"></td>
+          <td><span class="empty-row-unit small text-muted" data-empty-idx="${i}">-</span></td>
+          <td class="text-end"><input type="number" class="form-control form-control-sm text-end empty-row-consume" data-empty-idx="${i}" step="0.001" min="0.001" value="1" style="width:100px;"></td>
+        </tr>`);
+      }
+      const allRows = lineRows.concat(pendingRows).concat(emptyRows);
+      if (allRows.length) {
+        tbody.innerHTML = allRows.join("");
       } else {
-        tbody.innerHTML = rows;
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">' + (window.I18n?.t("bom.noMaterials") || "Chưa có NVL") + "</td></tr>";
       }
       const checkAll = document.getElementById("checkAll");
-      checkAll.checked = false;
-      checkAll.onchange = function() {
-        tbody.querySelectorAll(".line-check, .line-check-pending").forEach(cb => { cb.checked = this.checked; });
-      };
+      if (checkAll) {
+        checkAll.checked = false;
+        checkAll.onchange = function() {
+          tbody.querySelectorAll(".line-check, .line-check-pending").forEach(cb => { cb.checked = this.checked; });
+        };
+      }
+      if (canEdit) {
+        tbody.querySelectorAll("tr[data-key]:not(.empty-row)").forEach((tr) => {
+          const key = tr.dataset.key;
+          const inp = tr.querySelector(".consume-input, .consume-input-pending");
+          if (inp) {
+            inp.onfocus = () => {
+              focusedRowKey = key;
+              document.querySelectorAll("#bomLinesBody .grid-input-first-line").forEach(el => el.classList.remove("grid-input-first-line"));
+              tr.classList.add("grid-input-first-line");
+            };
+          }
+        });
+        if (typeof setupEmptyRows === "function") setupEmptyRows();
+      }
     }
 
     function getLogHtml() {
       const a = bomData.audit || {};
-      const fmt = (d) => d ? new Date(d).toLocaleString("vi-VN") : "-";
+      const fmt = (d) => {
+        if (!d) return "-";
+        const dt = new Date(d);
+        const adj = new Date(dt.getTime() - 7 * 60 * 60 * 1000);
+        return adj.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", dateStyle: "short", timeStyle: "medium" });
+      };
+      const createdBy = a.createdBy ?? a.CreatedBy ?? "-";
+      const updatedBy = a.updatedBy ?? a.UpdatedBy ?? "-";
       return `
         <div class="log-popover small">
-          <div><strong>${window.I18n?.t("bom.createdAt") || "Thời gian tạo"}:</strong> ${fmt(a.createdAt)}</div>
-          <div><strong>${window.I18n?.t("bom.createdBy") || "Người tạo"}:</strong> ${a.createdBy || "-"}</div>
-          <div class="mt-2"><strong>${window.I18n?.t("bom.updatedAt") || "Thay đổi cuối"}:</strong> ${fmt(a.updatedAt)}</div>
-          <div><strong>${window.I18n?.t("bom.updatedBy") || "Người thay đổi"}:</strong> ${a.updatedBy || "-"}</div>
+          <div><strong>${window.I18n?.t("bom.createdAt") || "Thời gian tạo"}:</strong> ${fmt(a.createdAt ?? a.CreatedAt)}</div>
+          <div><strong>${window.I18n?.t("bom.createdBy") || "Người tạo"}:</strong> ${createdBy || "-"}</div>
+          <div class="mt-2"><strong>${window.I18n?.t("bom.updatedAt") || "Thay đổi cuối"}:</strong> ${fmt(a.updatedAt ?? a.UpdatedAt)}</div>
+          <div><strong>${window.I18n?.t("bom.updatedBy") || "Người thay đổi"}:</strong> ${updatedBy || "-"}</div>
         </div>
       `;
     }
 
     document.getElementById("btnCheckLog").addEventListener("click", function() {
-      const popover = bootstrap.Popover.getOrCreateInstance(this, {
-        content: getLogHtml(),
-        html: true,
-        trigger: "focus"
-      });
+      const el = this;
+      let popover = bootstrap.Popover.getInstance(el);
+      if (!popover) {
+        popover = new bootstrap.Popover(el, { content: getLogHtml(), html: true, trigger: "focus" });
+      } else {
+        popover.setContent({ ".popover-body": getLogHtml() });
+      }
       popover.toggle();
     });
 
@@ -383,36 +424,78 @@
       renderBomDetail(bomData);
     };
 
+    function commitAllFilledEmptyRows() {
+      let committed = 0;
+      document.querySelectorAll(".empty-row").forEach((row) => {
+        const idx = parseInt(row.dataset.emptyIdx, 10);
+        const codeInp = row.querySelector(".empty-row-code");
+        const consumeInp = row.querySelector(".empty-row-consume");
+        const code = (codeInp?.value || "").trim();
+        const consume = parseFloat(consumeInp?.value);
+        const mat = materials.find(m => ((m.code || m.MaterialCode || "").toUpperCase()) === code.toUpperCase());
+        if (!mat || !code || isNaN(consume) || consume <= 0) return;
+        const existing = new Set([...(bomData.lines || []).map(l => l.MaterialId), ...pendingAdds.map(p => p.materialId)]);
+        if (existing.has(mat.id)) return;
+        pendingAdds.push({ materialId: mat.id, code: mat.code || mat.MaterialCode, name: mat.name || mat.MaterialName, unit: mat.unit || "PCS", consumePerUnit: consume });
+        committed++;
+      });
+      if (committed) { renderBomDetail(bomData); setupEmptyRows(); }
+      return committed;
+    }
+
     document.getElementById("btnSaveBom").onclick = async () => {
+      const btn = document.getElementById("btnSaveBom");
+      commitAllFilledEmptyRows();
+      const hasConsumeInputs = document.querySelectorAll(".consume-input").length;
+      const hasPendingDeletes = pendingDeletes.length > 0;
+      const hasPendingAdds = pendingAdds.length > 0;
+      if (!hasConsumeInputs && !hasPendingDeletes && !hasPendingAdds) {
+        alert(window.I18n?.t("bom.noChanges") || "Không có thay đổi để lưu");
+        return;
+      }
+      if (!currentProductId) { alert("Lỗi: Chưa chọn sản phẩm"); return; }
       try {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (window.I18n?.t("common.saving") || "Đang lưu...");
+        let saved = false;
         for (const inp of document.querySelectorAll(".consume-input")) {
-          const id = parseInt(inp.dataset.id);
-          if (pendingDeletes.includes(id)) continue;
+          const id = parseInt(inp.dataset.id, 10);
+          if (isNaN(id) || pendingDeletes.includes(id)) continue;
           const val = parseFloat(inp.value);
-          if (!isNaN(val) && val > 0) await fetchJson("/api/bom/" + id, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ consumePerUnit: val }) });
+          if (!isNaN(val) && val > 0) {
+            await fetchJson("/api/bom/" + id, { method: "PUT", body: JSON.stringify({ consumePerUnit: val }) });
+            saved = true;
+          }
         }
-        if (pendingDeletes.length) {
-          await fetchJson("/api/bom/delete-batch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: pendingDeletes }) });
+        if (hasPendingDeletes) {
+          await fetchJson("/api/bom/delete-batch", { method: "POST", body: JSON.stringify({ ids: pendingDeletes }) });
+          saved = true;
         }
         for (let i = 0; i < pendingAdds.length; i++) {
           const pa = pendingAdds[i];
           const inpEl = document.querySelector(`.consume-input-pending[data-pending-idx="${i}"]`);
           const consume = inpEl ? parseFloat(inpEl.value) : pa.consumePerUnit;
           if (pa.materialId && consume > 0) {
-            await fetchJson("/api/bom", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: currentProductId, materialId: pa.materialId, consumePerUnit: consume }) });
+            await fetchJson("/api/bom", { method: "POST", body: JSON.stringify({ productId: currentProductId, materialId: pa.materialId, consumePerUnit: consume }) });
+            saved = true;
           }
         }
-        if (document.querySelectorAll(".consume-input, .consume-input-pending").length || pendingDeletes.length || pendingAdds.length) {
+        if (saved) {
           alert(window.I18n?.t("common.updateSuccess") || "Đã lưu!");
           openBomDetail(currentProductId);
         }
-      } catch (err) { alert(err.message); }
+      } catch (err) {
+        alert(err.message || "Lỗi lưu");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i><span data-i18n="common.save">Lưu</span>';
+      }
     };
 
-    function commitInlineAdd() {
-      const codeInp = document.getElementById("inlineMaterialCode");
-      const nameInp = document.getElementById("inlineMaterialName");
-      const consumeInp = document.getElementById("inlineConsume");
+    function commitEmptyRowAdd(emptyIdx) {
+      const codeInp = document.querySelector(`.empty-row-code[data-empty-idx="${emptyIdx}"]`);
+      const nameInp = document.querySelector(`.empty-row-name[data-empty-idx="${emptyIdx}"]`);
+      const consumeInp = document.querySelector(`.empty-row-consume[data-empty-idx="${emptyIdx}"]`);
       const code = (codeInp?.value || "").trim();
       const consume = parseFloat(consumeInp?.value);
       const mat = materials.find(m => ((m.code || m.MaterialCode || "").toUpperCase()) === code.toUpperCase());
@@ -421,36 +504,58 @@
       const existing = new Set([...(bomData.lines || []).map(l => l.MaterialId), ...pendingAdds.map(p => p.materialId)]);
       if (existing.has(mat.id)) { alert(window.I18n?.t("bom.materialExists") || "NVL đã có trong BOM"); return; }
       pendingAdds.push({ materialId: mat.id, code: mat.code || mat.MaterialCode, name: mat.name || mat.MaterialName, unit: mat.unit || "PCS", consumePerUnit: consume });
-      codeInp.value = ""; nameInp.value = ""; document.getElementById("inlineMaterialUnit").textContent = "-"; consumeInp.value = "1";
       renderBomDetail(bomData);
+      const firstCode = document.querySelector(".empty-row-code");
+      if (firstCode) firstCode.focus();
     }
 
-    function setupInlineAddRow() {
-      const codeInp = document.getElementById("inlineMaterialCode");
-      const nameInp = document.getElementById("inlineMaterialName");
-      const consumeInp = document.getElementById("inlineConsume");
-      const unitEl = document.getElementById("inlineMaterialUnit");
-      if (!codeInp || !consumeInp) return;
-      codeInp.oninput = codeInp.onpaste = function() {
-        setTimeout(() => {
-          const code = (codeInp.value || "").trim();
-          const mat = materials.find(m => ((m.code || m.MaterialCode || "").toUpperCase()) === code.toUpperCase());
-          if (mat) {
-            nameInp.value = mat.name || mat.MaterialName || "";
-            unitEl.textContent = mat.unit || "PCS";
-            consumeInp.focus();
+    function setupEmptyRows() {
+      const tbody = document.getElementById("bomLinesBody");
+      if (!tbody || !canEdit) return;
+      tbody.querySelectorAll(".empty-row").forEach((row) => {
+        const idx = parseInt(row.dataset.emptyIdx);
+        const key = row.dataset.key;
+        const codeInp = row.querySelector(".empty-row-code");
+        const nameInp = row.querySelector(".empty-row-name");
+        const unitEl = row.querySelector(".empty-row-unit");
+        const consumeInp = row.querySelector(".empty-row-consume");
+        if (!codeInp || !consumeInp) return;
+        const onFocus = () => {
+          focusedRowKey = key;
+          if (idx === emptyRowsCount - 1) {
+            emptyRowsCount += 2;
+            renderBomDetail(bomData);
+            setupEmptyRows();
+            const nextCode = document.querySelector(`.empty-row-code[data-empty-idx="${idx}"]`);
+            if (nextCode) nextCode.focus();
           } else {
-            nameInp.value = ""; unitEl.textContent = "-";
+            document.querySelectorAll("#bomLinesBody .grid-input-first-line").forEach(el => el.classList.remove("grid-input-first-line"));
+            row.classList.add("grid-input-first-line");
           }
-        }, 10);
-      };
-      consumeInp.onkeydown = function(e) {
-        if (e.key === "Enter") { e.preventDefault(); commitInlineAdd(); }
-      };
+        };
+        codeInp.onfocus = consumeInp.onfocus = onFocus;
+        codeInp.oninput = codeInp.onpaste = function() {
+          setTimeout(() => {
+            const code = (codeInp.value || "").trim();
+            const mat = materials.find(m => ((m.code || m.MaterialCode || "").toUpperCase()) === code.toUpperCase());
+            if (mat) {
+              nameInp.value = mat.name || mat.MaterialName || "";
+              unitEl.textContent = mat.unit || "PCS";
+              consumeInp.focus();
+            } else {
+              nameInp.value = ""; unitEl.textContent = "-";
+            }
+          }, 10);
+        };
+        consumeInp.onkeydown = function(e) {
+          if (e.key === "Enter") { e.preventDefault(); commitEmptyRowAdd(idx); }
+        };
+      });
     }
 
     document.getElementById("btnAddMaterial").onclick = () => {
-      document.getElementById("inlineMaterialCode").focus();
+      const firstCode = document.querySelector(".empty-row-code");
+      if (firstCode) firstCode.focus();
     };
 
     document.getElementById("btnConfirmAddMaterial").onclick = async () => {
@@ -519,6 +624,27 @@
       document.getElementById("btnSaveBom").style.display = "none";
       document.getElementById("checkAll").parentElement.innerHTML = "";
     }
+
+    function cleanupModalBackdrop() {
+      setTimeout(() => {
+        document.querySelectorAll(".modal-backdrop").forEach(el => el.remove());
+        document.body.classList.remove("modal-open");
+        document.body.style.overflow = "";
+        document.body.style.paddingRight = "";
+        try {
+          const doc = window.parent?.document;
+          if (doc && doc !== document) {
+            doc.querySelectorAll(".modal-backdrop").forEach(el => el.remove());
+            doc.body.classList.remove("modal-open");
+            doc.body.style.overflow = "";
+            doc.body.style.paddingRight = "";
+          }
+        } catch (_) {}
+      }, 50);
+    }
+    document.querySelectorAll(".modal").forEach((modal) => {
+      modal.addEventListener("hidden.bs.modal", cleanupModalBackdrop);
+    });
 
     loadProducts();
   </script>
