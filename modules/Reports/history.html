@@ -52,23 +52,23 @@
             </div>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="typeFilter" id="typePO" value="PO">
-              <label class="form-check-label" for="typePO">Phiếu mua</label>
+              <label class="form-check-label" for="typePO" data-i18n="history.typePO">Phiếu mua</label>
             </div>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="typeFilter" id="typeSO" value="SO">
-              <label class="form-check-label" for="typeSO">Phiếu bán</label>
+              <label class="form-check-label" for="typeSO" data-i18n="history.typeSO">Phiếu bán</label>
             </div>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="typeFilter" id="typeReceipt" value="RECEIPT">
-              <label class="form-check-label" for="typeReceipt">Phiếu nhập</label>
+              <label class="form-check-label" for="typeReceipt" data-i18n="history.typeReceipt">Phiếu nhập</label>
             </div>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="typeFilter" id="typeIssue" value="ISSUE">
-              <label class="form-check-label" for="typeIssue">Phiếu xuất</label>
+              <label class="form-check-label" for="typeIssue" data-i18n="history.typeIssue">Phiếu xuất</label>
             </div>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="typeFilter" id="typeAdj" value="ADJUSTMENT">
-              <label class="form-check-label" for="typeAdj">Điều chỉnh</label>
+              <label class="form-check-label" for="typeAdj" data-i18n="history.typeAdj">Điều chỉnh</label>
             </div>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="typeFilter" id="typeTransfer" value="TRANSFER">
@@ -76,11 +76,11 @@
             </div>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="typeFilter" id="typeBOM" value="BOM">
-              <label class="form-check-label" for="typeBOM">BOM</label>
+              <label class="form-check-label" for="typeBOM" data-i18n="history.typeBOM">BOM</label>
             </div>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="typeFilter" id="typePartner" value="PARTNER">
-              <label class="form-check-label" for="typePartner">Đối tác</label>
+              <label class="form-check-label" for="typePartner" data-i18n="history.typePartner">Đối tác</label>
             </div>
           </div>
         </div>
@@ -96,7 +96,7 @@
           <label class="form-label" data-i18n="history.executor">Người thực hiện</label>
           <div class="input-group" style="max-width:280px;">
             <span class="input-group-text"><i class="bi bi-person"></i></span>
-            <input type="text" id="executor" class="form-control form-control-sm" placeholder="Tìm theo tên, mã...">
+            <input type="text" id="executor" class="form-control form-control-sm" data-i18n="history.executorPlaceholder" placeholder="Tìm theo tên, mã...">
           </div>
         </div>
         <div class="col-md-6">
@@ -233,7 +233,7 @@
           };
         });
       } catch (err) {
-        document.getElementById("historyBody").innerHTML = `<tr><td colspan="8" class="text-center text-danger">${err.message || "Lỗi tải dữ liệu"}</td></tr>`;
+        document.getElementById("historyBody").innerHTML = `<tr><td colspan="8" class="text-center text-danger">${err.message || (window.I18n?.t("history.loadError") || "Lỗi tải dữ liệu")}</td></tr>`;
         document.getElementById("emptyState").style.display = "none";
       }
     }

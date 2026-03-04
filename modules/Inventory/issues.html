@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phiếu xuất kho</title>
+    <title data-i18n="inventory.issues">Phiếu xuất kho</title>
+    <script src="/modules/assets/js/i18n.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <script src="/modules/assets/js/auth.js"></script>
@@ -15,19 +16,19 @@
 </head>
 <body>
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
-        <a href="issue-detail.html" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i>Tạo phiếu xuất kho</a>
+        <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i><span data-i18n="common.back">Quay lại</span></a>
+        <a href="issue-detail.html" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i><span data-i18n="inventory.createIssue">Tạo phiếu xuất kho</span></a>
     </div>
     <div class="card">
-        <div class="card-header"><h5 class="mb-0"><i class="bi bi-box-arrow-right me-2"></i>Phiếu xuất kho bán hàng</h5></div>
+        <div class="card-header"><h5 class="mb-0"><i class="bi bi-box-arrow-right me-2"></i><span data-i18n="inventory.issuesTitle">Phiếu xuất kho bán hàng</span></h5></div>
         <div class="card-body">
             <div class="d-flex gap-2 mb-3">
-                <select id="status" class="form-select form-select-sm" style="width:150px;"><option value="">Tất cả</option><option value="DRAFT">DRAFT</option><option value="CONFIRM">CONFIRM</option></select>
-                <button id="btnLoad" class="btn btn-primary btn-sm">Tải</button>
+                <select id="status" class="form-select form-select-sm" style="width:150px;"><option value="" data-i18n="common.all">Tất cả</option><option value="DRAFT">DRAFT</option><option value="CONFIRM">CONFIRM</option></select>
+                <button id="btnLoad" class="btn btn-primary btn-sm" data-i18n="inventory.load">Tải</button>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0 table-sm">
-                    <thead><tr><th>Số phiếu</th><th>Kho</th><th>Đơn bán</th><th>Khách hàng</th><th>Ngày xuất</th><th>Trạng thái</th><th>Người tạo</th><th>Thao tác</th></tr></thead>
+                    <thead><tr><th data-i18n="inventory.ticketNumber">Số phiếu</th><th data-i18n="inventory.tableWarehouse">Kho</th><th data-i18n="inventory.salesOrder">Đơn bán</th><th data-i18n="inventory.customer">Khách hàng</th><th data-i18n="inventory.issueDate">Ngày xuất</th><th data-i18n="inventory.tableStatus">Trạng thái</th><th data-i18n="inventory.tableCreatedBy">Người tạo</th><th data-i18n="common.actions">Thao tác</th></tr></thead>
                     <tbody id="tbody"></tbody>
                 </table>
             </div>
@@ -56,23 +57,24 @@
                         <td>${i.issueDate ? new Date(i.issueDate).toLocaleDateString("vi-VN") : "-"}</td>
                         <td><span class="badge ${(i.status || i.Status) === 'CONFIRM' ? 'bg-success' : 'bg-warning text-dark'}">${i.status || i.Status || ""}</span></td>
                         <td class="small">${i.createdByName || i.CreatedByName || "-"}</td>
-                        <td>${canConfirm && (i.status || i.Status) === 'DRAFT' ? `<button class="btn btn-sm btn-success" onclick="confirmIssue(${i.id})">Duyệt</button>` : ""}</td>
+                        <td>${canConfirm && (i.status || i.Status) === 'DRAFT' ? `<button class="btn btn-sm btn-success" onclick="confirmIssue(${i.id})">` + (window.I18n?.t("inventory.approve") || "Duyệt") + `</button>` : ""}</td>
                     </tr>
-                `).join("") : "<tr><td colspan='8' class='text-center text-muted py-4'>Chưa có phiếu nào</td></tr>";
+                `).join("") : "<tr><td colspan='8' class='text-center text-muted py-4'>" + (window.I18n?.t("inventory.noTickets") || "Chưa có phiếu nào") + "</td></tr>";
             } catch (err) {
                 document.getElementById("tbody").innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4">${err.message}</td></tr>`;
             }
         }
         async function confirmIssue(id) {
-            if (!confirm("Xác nhận duyệt phiếu xuất kho?")) return;
+            if (!confirm(window.I18n?.t("inventory.confirmIssueConfirm") || "Xác nhận duyệt phiếu xuất kho?")) return;
             try {
                 await fetchJson("/api/stock-issues/" + id + "/confirm", { method: "POST", headers: { "Content-Type": "application/json" } });
-                alert("Đã duyệt!");
+                alert(window.I18n?.t("inventory.confirmAdjSuccess") || "Đã duyệt!");
                 load();
-            } catch (err) { alert("Lỗi: " + err.message); }
+            } catch (err) { alert((window.I18n?.t("inventory.loadError") || "Lỗi: ") + err.message); }
         }
         document.getElementById("btnLoad").onclick = load;
         load();
+        document.addEventListener("languageChanged", () => window.I18n?.updatePage?.());
     </script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quản lý Người dùng</title>
+  <title data-i18n="users.title">Quản lý Người dùng</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <script src="/modules/assets/js/auth.js"></script>
@@ -25,23 +25,23 @@
     <div class="card-header-custom">
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
-          <h4><i class="bi bi-person-gear me-2"></i>Quản lý Người dùng</h4>
-          <small class="opacity-90">Quản lý tài khoản và phân quyền</small>
+          <h4><i class="bi bi-person-gear me-2"></i><span data-i18n="users.title">Quản lý Người dùng</span></h4>
+          <small class="opacity-90" data-i18n="users.subtitle">Quản lý tài khoản và phân quyền</small>
         </div>
-        <button id="btnAdd" class="btn btn-light btn-add" style="display:none;"><i class="bi bi-plus-lg me-1"></i>Thêm mới</button>
+        <button id="btnAdd" class="btn btn-light btn-add" style="display:none;"><i class="bi bi-plus-lg me-1"></i><span data-i18n="users.add">Thêm mới</span></button>
       </div>
     </div>
     <div class="card-body p-4">
       <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
         <div class="d-flex align-items-center gap-2 flex-wrap">
-          <input id="searchInput" type="text" class="form-control form-control-sm" style="width:220px;" placeholder="Tìm username, tên, email...">
+          <input id="searchInput" type="text" class="form-control form-control-sm" style="width:220px;" data-i18n="users.searchPlaceholder" placeholder="Tìm username, tên, email...">
           <select id="deptFilter" class="form-select form-select-sm" style="width:180px;">
-            <option value="">Tất cả phòng ban</option>
+            <option value="" data-i18n="users.allDepts">Tất cả phòng ban</option>
           </select>
           <select id="activeFilter" class="form-select form-select-sm" style="width:120px;">
-            <option value="">Tất cả</option>
-            <option value="1">Hoạt động</option>
-            <option value="0">Không hoạt động</option>
+            <option value="" data-i18n="common.all">Tất cả</option>
+            <option value="1" data-i18n="users.active">Hoạt động</option>
+            <option value="0" data-i18n="users.inactive">Không hoạt động</option>
           </select>
         </div>
         <div class="small text-muted" id="totalInfo">-</div>
@@ -51,13 +51,13 @@
         <table class="table table-hover align-middle mb-0">
           <thead>
             <tr>
-              <th>Username</th>
-              <th>Họ tên</th>
-              <th>Email</th>
-              <th>Phòng ban</th>
-              <th>Trạng thái</th>
-              <th>Ngày tạo</th>
-              <th class="text-center">Thao tác</th>
+              <th data-i18n="users.table.username">Username</th>
+              <th data-i18n="users.table.fullName">Họ tên</th>
+              <th data-i18n="users.table.email">Email</th>
+              <th data-i18n="users.table.dept">Phòng ban</th>
+              <th data-i18n="users.table.status">Trạng thái</th>
+              <th data-i18n="users.table.createdAt">Ngày tạo</th>
+              <th class="text-center" data-i18n="users.table.actions">Thao tác</th>
             </tr>
           </thead>
           <tbody id="usersBody"></tbody>
@@ -66,13 +66,13 @@
 
       <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
-          <span class="small text-muted">Hiển thị</span>
+          <span class="small text-muted" data-i18n="users.perPage">Hiển thị</span>
           <select id="limitSelect" class="form-select form-select-sm" style="width:70px;">
             <option value="10">10</option>
             <option value="20" selected>20</option>
             <option value="50">50</option>
           </select>
-          <span class="small text-muted">/ trang</span>
+          <span class="small text-muted" data-i18n="users.perPageSuffix">/ trang</span>
         </div>
         <nav><ul id="pagination" class="pagination pagination-sm mb-0"></ul></nav>
       </div>
@@ -90,7 +90,7 @@
 
     async function fetchJson(url, opts = {}) {
       const res = await fetch(url, opts);
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || (window.I18n?.t("users.requestFailed") || "Request failed")); }
       return res.json();
     }
 
@@ -125,7 +125,7 @@
         lastItems = data.items || [];
         totalItems = data.total;
         totalPages = data.totalPages || 1;
-        document.getElementById("totalInfo").textContent = "Tổng: " + data.total + " bản ghi";
+        document.getElementById("totalInfo").textContent = (window.I18n?.t("users.totalRecords", { total: data.total }) || ("Tổng: " + data.total + " bản ghi"));
         renderUsers(lastItems);
         renderPagination();
       } catch (err) {
@@ -136,7 +136,7 @@
     function renderUsers(items) {
       const body = document.getElementById("usersBody");
       body.innerHTML = "";
-      if (!items?.length) { body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Chưa có dữ liệu</td></tr>'; return; }
+      if (!items?.length) { body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">' + (window.I18n?.t("users.noData") || "Chưa có dữ liệu") + '</td></tr>'; return; }
       items.forEach(u => {
         const tr = document.createElement("tr");
         tr.style.cursor = "pointer";
@@ -146,7 +146,7 @@
           <td class="fw-medium">${u.fullName || "-"}</td>
           <td>${u.email || "-"}</td>
           <td>${u.deptName || "-"}</td>
-          <td><span class="badge ${u.isActive ? "badge-active" : "badge-inactive"}">${u.isActive ? "Hoạt động" : "Không hoạt động"}</span></td>
+          <td><span class="badge ${u.isActive ? "badge-active" : "badge-inactive"}">${u.isActive ? (window.I18n?.t("users.active") || "Hoạt động") : (window.I18n?.t("users.inactive") || "Không hoạt động")}</span></td>
           <td>${formatDate(u.createdAt)}</td>
           <td class="text-center" onclick="event.stopPropagation()">
             ${canEdit ? `<button class="btn btn-sm btn-outline-primary me-1" onclick="location.href='/modules/Users/detail.html?id=${u.id}'"><i class="bi bi-pencil"></i></button>` : ""}
@@ -189,11 +189,11 @@
 
     async function deleteUser(id, ev) {
       ev.stopPropagation();
-      if (!confirm("Bạn có chắc muốn xóa người dùng này?")) return;
+      if (!confirm(window.I18n?.t("users.confirmDelete") || "Bạn có chắc muốn xóa người dùng này?")) return;
       try {
         await fetchJson("/api/users/" + id, { method: "DELETE" });
         loadUsers();
-      } catch (err) { alert("Xóa thất bại: " + err.message); }
+      } catch (err) { alert((window.I18n?.t("users.deleteFailed") || "Xóa thất bại: ") + err.message); }
     }
 
     document.getElementById("btnAdd").onclick = () => location.href = "/modules/Users/detail.html";
@@ -203,6 +203,7 @@
     document.getElementById("limitSelect").onchange = () => { currentPage = 1; loadUsers(); };
 
     loadDepts().then(loadUsers);
+    document.addEventListener("languageChanged", () => window.I18n?.updatePage?.());
   </script>
 </body>
 </html>

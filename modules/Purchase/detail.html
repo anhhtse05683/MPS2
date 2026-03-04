@@ -207,6 +207,20 @@
         .user-option.selected { background: #e3f2fd; font-weight: 500; }
         .user-option-name { font-weight: 600; color: #334155; }
         .user-option-username { font-size: 0.8rem; color: #64748b; margin-left: 0.5rem; }
+
+        /* Supplier searchable dropdown */
+        .supplier-select-wrapper { position: relative; }
+        .supplier-dropdown {
+            position: absolute; top: 100%; left: 0; right: 0;
+            background: white; border: 1px solid #ced4da; border-radius: 0.25rem;
+            max-height: 200px; overflow-y: auto; z-index: 9999; display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .supplier-dropdown.show { display: block; position: fixed; }
+        .supplier-option { padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid #f1f5f9; }
+        .supplier-option:hover { background: #f8fafc; }
+        .supplier-option-code { font-weight: 600; color: #2563eb; }
+        .supplier-option-name { font-size: 0.8rem; color: #64748b; margin-left: 0.5rem; }
     </style>
 </head>
 
@@ -217,7 +231,10 @@
                 <i class="bi bi-arrow-left"></i> <span data-i18n="purchase.backToList">Quay lại danh sách</span>
             </a>
         </div>
-        <div>
+        <div class="d-flex gap-2">
+            <button id="btnSendEmail" class="btn btn-outline-primary btn-sm d-none" title="Tải PDF và mở email gửi NCC">
+                <i class="bi bi-envelope-paper"></i> <span data-i18n="purchase.sendEmail">Gửi email NCC</span>
+            </button>
             <button id="btnSave" class="btn btn-primary">
                 <i class="bi bi-save"></i> <span data-i18n="purchase.save">Lưu</span>
             </button>
@@ -246,14 +263,17 @@
                         data-i18n="purchase.form.invoiceNumberPlaceholder" placeholder="INV-2025-001">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label" data-i18n="purchase.form.supplierName">Tên nhà cung cấp</label>
-                    <input type="text" id="supplierName" class="form-control"
-                        data-i18n="purchase.form.supplierNamePlaceholder" placeholder="Công ty ABC">
+                    <label class="form-label" data-i18n="purchase.form.supplierCode">Mã nhà cung cấp</label>
+                    <div id="supplierCodeWrapper" class="supplier-select-wrapper" style="position:relative;">
+                        <input type="text" id="supplierCode" class="form-control"
+                            data-i18n="purchase.form.supplierCodePlaceholder" placeholder="Nhập mã hoặc tên để tìm...">
+                        <div id="supplierCodeDropdown" class="supplier-dropdown"></div>
+                    </div>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label" data-i18n="purchase.form.customerCode">Mã khách hàng</label>
-                    <input type="text" id="customerCode" class="form-control"
-                        data-i18n="purchase.form.customerCodePlaceholder" placeholder="CUST001">
+                    <label class="form-label" data-i18n="purchase.form.supplierName">Tên nhà cung cấp</label>
+                    <input type="text" id="supplierName" class="form-control" readonly
+                        data-i18n="purchase.form.supplierNamePlaceholder" placeholder="Chọn mã NCC để tự động điền">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label" data-i18n="purchase.form.warehouse">Kho nhận hàng</label>
@@ -286,14 +306,15 @@
                 </div>
                 <div class="col-md-6">
                     <label class="form-label" data-i18n="purchase.form.createdBy">Người thao tác</label>
-                    <input type="text" id="createdBy" class="form-control" readonly
-                        data-i18n="purchase.form.createdByPlaceholder" placeholder="Tự động theo tài khoản đăng nhập">
+                    <div id="createdByWrapper" class="user-select-wrapper" style="position:relative;">
+                        <input type="text" id="createdBy" class="form-control user-search-input" data-i18n="purchase.form.userSearchPlaceholder" placeholder="Tìm theo tên, username...">
+                        <div id="createdByDropdown" class="user-dropdown"></div>
+                    </div>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label" data-i18n="purchase.form.assignedTo">Người phụ trách</label>
                     <div id="assignedToWrapper" class="user-select-wrapper" style="position:relative;">
-                        <input type="text" id="assignedTo" class="form-control user-search-input"
-                            data-i18n="purchase.form.assignedToPlaceholder" placeholder="Tìm kiếm theo tên, username...">
+                        <input type="text" id="assignedTo" class="form-control user-search-input" data-i18n="purchase.form.userSearchPlaceholder" placeholder="Tìm theo tên, username...">
                         <div id="assignedToDropdown" class="user-dropdown"></div>
                     </div>
                 </div>
@@ -348,6 +369,8 @@
         let materials = [];
         let users = [];
         let warehouses = [];
+        let suppliers = [];
+        let selectedSupplier = null;
 
         // Get order ID from URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -409,6 +432,56 @@
             }
         }
 
+        async function openInvoiceAndEmail(poId) {
+            const supplierCode = document.getElementById("supplierCode").value.trim();
+            let supplierEmail = selectedSupplier?.email || null;
+            if (!supplierEmail && supplierCode) {
+                try {
+                    const p = await fetchJson(`/api/partners/by-code/${encodeURIComponent(supplierCode)}?type=S`);
+                    supplierEmail = p?.email || null;
+                } catch (_) {}
+            }
+            const poNum = document.getElementById("poNumber").value.trim() || poId;
+            const subject = encodeURIComponent(`Invoice / Phiếu mua hàng ${poNum}`);
+            const body = encodeURIComponent(
+                `Kính gửi Nhà cung cấp,\n\nĐính kèm phiếu mua hàng / Invoice ${poNum}.\n\nVui lòng đính kèm file PDF vừa tải xuống vào email này.\n\nTrân trọng.`
+            );
+            try {
+                const fetcher = (typeof Auth !== "undefined" && Auth.fetchWithAuth) ? Auth.fetchWithAuth.bind(Auth) : fetch;
+                const res = await fetcher(`/api/purchase-orders/${poId}/invoice-pdf`);
+                if (!res.ok) throw new Error("Failed to generate PDF");
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `Invoice-PO-${poNum || poId}.pdf`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error("PDF download failed:", e);
+                alert("Không tải được PDF. Vui lòng thử lại từ trang chi tiết.");
+            }
+            setTimeout(() => {
+                const mailto = supplierEmail
+                    ? `mailto:${supplierEmail}?subject=${subject}&body=${body}`
+                    : `mailto:?subject=${subject}&body=${body}`;
+                window.location.href = mailto;
+            }, 800);
+        }
+
+        // Search suppliers - API không cần partners.view
+        async function searchSuppliers(term) {
+            try {
+                const params = new URLSearchParams({ limit: 50 });
+                if (term && term.trim()) params.set("search", term.trim());
+                const res = await fetchJson("/api/partners/suppliers?" + params);
+                return res.items || [];
+            } catch (err) {
+                console.warn("Failed to search suppliers:", err);
+                return [];
+            }
+        }
+
         // Load warehouses (default NVL for purchase) - dùng WarehouseCode
         async function loadWarehouses() {
             const sel = document.getElementById("warehouseCode");
@@ -461,6 +534,7 @@
                     CreatedBy: "",
                     AssignedTo: "",
                 };
+                selectedSupplier = null;
                 lines = [];
                 renderForm();
                 renderLines();
@@ -469,6 +543,12 @@
 
             try {
                 order = await fetchJson(`/api/purchase-orders/${orderId}`);
+                if (order.CustomerCode) {
+                    try {
+                        const p = await fetchJson(`/api/partners/by-code/${encodeURIComponent(order.CustomerCode)}?type=S`);
+                        selectedSupplier = { code: p.code, name: p.name, email: p.email };
+                    } catch (_) { selectedSupplier = null; }
+                } else selectedSupplier = null;
                 const linesData = await fetchJson(`/api/purchase-orders/${orderId}/lines`);
                 // Map API response fields (PascalCase) to camelCase
                 lines = linesData.map(line => ({
@@ -495,32 +575,127 @@
         function renderForm() {
             document.getElementById("poNumber").value = order.PONumber || "";
             document.getElementById("invoiceNumber").value = order.InvoiceNumber || "";
+            document.getElementById("supplierCode").value = order.CustomerCode || "";
             document.getElementById("supplierName").value = order.SupplierName || "";
-            document.getElementById("customerCode").value = order.CustomerCode || "";
             document.getElementById("warehouseCode").value = order.WarehouseCode || "WH-NVL";
             document.getElementById("currency").value = order.Currency || "VND";
             document.getElementById("invoiceDate").value = order.InvoiceDate ? order.InvoiceDate.split("T")[0] : "";
             document.getElementById("status").value = order.Status || "INITIAL";
             const currentUser = window.Auth?.getUser?.();
-            const userDisplay = currentUser?.fullName || currentUser?.username || "";
+            const userDisplay = (currentUser?.FullName || currentUser?.fullName || currentUser?.Username || currentUser?.username || "").trim();
             document.getElementById("createdBy").value = orderId ? (order.CreatedBy || "") : userDisplay;
-            document.getElementById("assignedTo").value = order.AssignedTo || "";
+            document.getElementById("assignedTo").value = orderId ? (order.AssignedTo || "") : userDisplay;
+            if (!order.CustomerCode) selectedSupplier = null;
+            setupSupplierCodeDropdown();
+            setupCreatedByDropdown();
             setupAssignedToDropdown();
+            const btnSend = document.getElementById("btnSendEmail");
+            if (btnSend) {
+                btnSend.classList.toggle("d-none", !orderId || (order.Status || "").toUpperCase() !== "CONFIRM");
+                btnSend.onclick = () => orderId && openInvoiceAndEmail(orderId);
+            }
         }
 
-        function setupAssignedToDropdown() {
-            const input = document.getElementById("assignedTo");
-            const dropdown = document.getElementById("assignedToDropdown");
-            const wrapper = document.getElementById("assignedToWrapper");
+        function setupSupplierCodeDropdown() {
+            const input = document.getElementById("supplierCode");
+            const dropdown = document.getElementById("supplierCodeDropdown");
+            const wrapper = document.getElementById("supplierCodeWrapper");
+            const nameInput = document.getElementById("supplierName");
+            let searchTimeout = null;
+
+            async function renderOptions(searchTerm = "") {
+                dropdown.innerHTML = '<div class="supplier-option" style="cursor:default;color:#888;">Đang tìm...</div>';
+                const list = await searchSuppliers(searchTerm);
+                dropdown.innerHTML = "";
+                if (list.length === 0) {
+                    const noResult = document.createElement("div");
+                    noResult.className = "supplier-option";
+                    noResult.textContent = searchTerm ? (window.I18n?.t("purchase.noSupplierFound") || "Không tìm thấy NCC. Thử nhập mã hoặc tên khác.") : (window.I18n?.t("purchase.searchSupplierHint") || "Nhập mã hoặc tên NCC để tìm kiếm.");
+                    noResult.style.cursor = "default";
+                    noResult.style.color = "#888";
+                    dropdown.appendChild(noResult);
+                } else {
+                    const exactMatch = list.find(p => (p.code || "").toUpperCase() === (searchTerm || "").toUpperCase());
+                    if (exactMatch && nameInput) {
+                        input.value = exactMatch.code || "";
+                        nameInput.value = exactMatch.name || "";
+                        selectedSupplier = { code: exactMatch.code, name: exactMatch.name, email: exactMatch.email || null };
+                    }
+                    list.forEach(p => {
+                        const opt = document.createElement("div");
+                        opt.className = "supplier-option";
+                        const codeSpan = document.createElement("span");
+                        codeSpan.className = "supplier-option-code";
+                        codeSpan.textContent = p.code || "";
+                        const nameSpan = document.createElement("span");
+                        nameSpan.className = "supplier-option-name";
+                        nameSpan.textContent = " - " + (p.name || "");
+                        opt.appendChild(codeSpan);
+                        opt.appendChild(nameSpan);
+                        opt.onclick = () => {
+                            input.value = p.code || "";
+                            if (nameInput) nameInput.value = p.name || "";
+                            selectedSupplier = { code: p.code, name: p.name, email: p.email || null };
+                            dropdown.classList.remove("show");
+                        };
+                        dropdown.appendChild(opt);
+                    });
+                }
+                requestAnimationFrame(positionDropdown);
+            }
+
+            function positionDropdown() {
+                if (!dropdown.classList.contains("show")) return;
+                const rect = input.getBoundingClientRect();
+                dropdown.style.top = rect.bottom + "px";
+                dropdown.style.left = rect.left + "px";
+                dropdown.style.width = rect.width + "px";
+            }
+
+            function showDropdown() {
+                dropdown.classList.add("show");
+                positionDropdown();
+                renderOptions(input.value.trim());
+            }
+
+            input.onfocus = showDropdown;
+            input.oninput = () => {
+                const v = input.value.trim();
+                if (!v) {
+                    nameInput.value = "";
+                    selectedSupplier = null;
+                }
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    if (dropdown.classList.contains("show")) renderOptions(input.value);
+                }, 200);
+            };
+            input.onblur = () => {
+                setTimeout(() => {
+                    if (!dropdown.contains(document.activeElement) && document.activeElement !== input)
+                        dropdown.classList.remove("show");
+                }, 150);
+            };
+            document.addEventListener("click", (e) => {
+                if (!wrapper.contains(e.target)) dropdown.classList.remove("show");
+            });
+            window.addEventListener("scroll", () => { if (dropdown.classList.contains("show")) positionDropdown(); }, true);
+        }
+
+        function setupUserDropdown(inputId, dropdownId, wrapperId) {
+            const input = document.getElementById(inputId);
+            const dropdown = document.getElementById(dropdownId);
+            const wrapper = document.getElementById(wrapperId);
+            if (!input || !dropdown || !wrapper) return;
 
             function renderOptions(searchTerm = "") {
                 dropdown.innerHTML = "";
                 const term = searchTerm.toLowerCase().trim();
-                const filtered = users.filter(u =>
-                    !term ||
-                    (u.fullName && u.fullName.toLowerCase().includes(term)) ||
-                    (u.username && u.username.toLowerCase().includes(term))
-                );
+                const filtered = users.filter(u => {
+                    const fn = u.fullName || u.FullName || "";
+                    const un = u.username || u.Username || "";
+                    return !term || fn.toLowerCase().includes(term) || un.toLowerCase().includes(term);
+                });
                 if (filtered.length === 0) {
                     const noResult = document.createElement("div");
                     noResult.className = "user-option";
@@ -531,9 +706,9 @@
                     filtered.forEach(u => {
                         const opt = document.createElement("div");
                         opt.className = "user-option";
-                        const display = u.fullName || u.username || "";
+                        const display = u.fullName || u.FullName || u.username || u.Username || "";
                         if (input.value === display) opt.classList.add("selected");
-                        opt.innerHTML = `<span class="user-option-name">${display}</span><span class="user-option-username">${u.username || ""}</span>`;
+                        opt.innerHTML = `<span class="user-option-name">${display}</span><span class="user-option-username">${u.username || u.Username || ""}</span>`;
                         opt.onclick = () => {
                             input.value = display;
                             dropdown.classList.remove("show");
@@ -564,6 +739,14 @@
                 if (!wrapper.contains(e.target)) dropdown.classList.remove("show");
             });
             window.addEventListener("scroll", () => { if (dropdown.classList.contains("show")) positionDropdown(); }, true);
+        }
+
+        function setupCreatedByDropdown() {
+            setupUserDropdown("createdBy", "createdByDropdown", "createdByWrapper");
+        }
+
+        function setupAssignedToDropdown() {
+            setupUserDropdown("assignedTo", "assignedToDropdown", "assignedToWrapper");
         }
 
         // Render lines
@@ -892,11 +1075,13 @@
                 }
             });
 
+            const supplierCodeVal = document.getElementById("supplierCode").value.trim();
+            const supplierNameVal = document.getElementById("supplierName").value.trim();
             const data = {
                 poNumber: poNumber,
                 invoiceNumber: document.getElementById("invoiceNumber").value.trim() || null,
-                supplierName: document.getElementById("supplierName").value.trim() || null,
-                customerCode: document.getElementById("customerCode").value.trim() || null,
+                supplierName: supplierNameVal || null,
+                customerCode: supplierCodeVal || null,
                 warehouseCode: document.getElementById("warehouseCode").value || "WH-NVL",
                 currency: document.getElementById("currency").value,
                 invoiceDate: document.getElementById("invoiceDate").value || null,
@@ -919,8 +1104,8 @@
             };
 
             try {
+                let savedId = orderId;
                 if (orderId) {
-                    // Update
                     await fetchJson(`/api/purchase-orders/${orderId}`, {
                         method: "PUT",
                         headers: { "Content-Type": "application/json" },
@@ -928,17 +1113,22 @@
                     });
                     alert(window.I18n?.t("purchase.updateSuccess") || "Cập nhật thành công!");
                 } else {
-                    // Create
                     const result = await fetchJson("/api/purchase-orders", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(data),
                     });
+                    savedId = result.id;
                     alert(window.I18n?.t("purchase.createSuccess") || "Tạo thành công!");
-                    window.location.href = `/modules/Purchase/detail.html?id=${result.id}`;
-                    return;
+                    }
+                if (data.status === "CONFIRM" && savedId) {
+                    await openInvoiceAndEmail(savedId);
                 }
-                loadOrder();
+                if (!orderId) {
+                    window.location.href = `/modules/Purchase/detail.html?id=${savedId}`;
+                } else {
+                    loadOrder();
+                }
             } catch (err) {
                 alert((window.I18n?.t("purchase.saveFailed") || "Lưu thất bại: ") + err.message);
             }

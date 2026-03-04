@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản lý Đơn sản xuất</title>
+    <title data-i18n="production.title">Quản lý Đơn sản xuất</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="/modules/assets/js/auth.js"></script>
     <script src="/modules/assets/js/i18n.js"></script>
@@ -81,33 +81,33 @@
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                 <div>
-                    <h4 class="mb-0">Quản lý Đơn sản xuất</h4>
-                    <small class="text-muted">Tạo, theo dõi và cập nhật trạng thái Production Orders</small>
+                    <h4 class="mb-0" data-i18n="production.title">Quản lý Đơn sản xuất</h4>
+                    <small class="text-muted" data-i18n="production.subtitle">Tạo, theo dõi và cập nhật trạng thái Production Orders</small>
                 </div>
                 <div class="d-flex toolbar align-items-center flex-wrap">
                     <select id="filterProduct" class="form-select form-select-sm">
-                        <option value="">Tất cả sản phẩm</option>
+                        <option value="" data-i18n="production.allProducts">Tất cả sản phẩm</option>
                     </select>
                     <input id="filterFromWeek" type="number" min="1" max="53" class="form-control form-control-sm"
-                        style="max-width: 90px;" placeholder="Từ tuần">
+                        style="max-width: 90px;" data-i18n="production.fromWeek" placeholder="Từ tuần">
                     <input id="filterFromYear" type="number" class="form-control form-control-sm"
-                        style="max-width: 90px;" placeholder="Năm">
+                        style="max-width: 90px;" data-i18n="production.year" placeholder="Năm">
                     <input id="filterToWeek" type="number" min="1" max="53" class="form-control form-control-sm"
-                        style="max-width: 90px;" placeholder="Đến tuần">
+                        style="max-width: 90px;" data-i18n="production.toWeek" placeholder="Đến tuần">
                     <input id="filterToYear" type="number" class="form-control form-control-sm"
-                        style="max-width: 90px;" placeholder="Năm">
+                        style="max-width: 90px;" data-i18n="production.year" placeholder="Năm">
                     <div class="btn-group pill-filter" role="group">
                         <button type="button" class="btn btn-outline-secondary btn-sm active"
-                            data-status="">All</button>
+                            data-status="" data-i18n="production.statusAll">All</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm"
-                            data-status="INITIAL">Initial</button>
+                            data-status="INITIAL" data-i18n="production.statusInitial">Initial</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm"
-                            data-status="ACTIVE">Active</button>
+                            data-status="ACTIVE" data-i18n="production.statusActive">Active</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm"
-                            data-status="COMPLETE">Complete</button>
+                            data-status="COMPLETE" data-i18n="production.statusComplete">Complete</button>
                     </div>
                     <button id="btnAddOrder" class="btn btn-primary btn-sm">
-                        <i class="bi bi-plus-lg"></i> Thêm đơn sản xuất
+                        <i class="bi bi-plus-lg"></i> <span data-i18n="production.addOrder">Thêm đơn sản xuất</span>
                     </button>
                 </div>
             </div>
@@ -117,14 +117,14 @@
                     <thead>
                         <tr>
                             <th>#</th>
-                            <th>Sản phẩm</th>
-                            <th>Tên sản phẩm</th>
-                            <th class="text-end">Số lượng</th>
-                            <th>Tuần</th>
-                            <th>Năm</th>
-                            <th>Trạng thái</th>
-                            <th>Ngày tạo</th>
-                            <th class="text-end">Thao tác</th>
+                            <th data-i18n="production.table.product">Sản phẩm</th>
+                            <th data-i18n="production.table.productName">Tên sản phẩm</th>
+                            <th class="text-end" data-i18n="production.table.quantity">Số lượng</th>
+                            <th data-i18n="production.table.week">Tuần</th>
+                            <th data-i18n="production.table.year">Năm</th>
+                            <th data-i18n="production.table.status">Trạng thái</th>
+                            <th data-i18n="production.table.createdAt">Ngày tạo</th>
+                            <th class="text-end" data-i18n="production.table.actions">Thao tác</th>
                         </tr>
                     </thead>
                     <tbody id="ordersBody"></tbody>
@@ -138,7 +138,7 @@
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="orderModalTitle">Thêm đơn sản xuất</h5>
+                    <h5 class="modal-title" id="orderModalTitle" data-i18n="production.modalTitle">Thêm đơn sản xuất</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -146,23 +146,23 @@
                         <input type="hidden" id="orderId">
 
                         <div class="col-md-6">
-                            <label class="form-label">Sản phẩm</label>
+                            <label class="form-label" data-i18n="production.form.product">Sản phẩm</label>
                             <select id="orderProductId" class="form-select" required></select>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">Tuần sản xuất</label>
+                            <label class="form-label" data-i18n="production.form.planWeek">Tuần sản xuất</label>
                             <input id="orderPlanWeek" type="number" min="1" max="53" class="form-control" required>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">Năm sản xuất</label>
+                            <label class="form-label" data-i18n="production.form.planYear">Năm sản xuất</label>
                             <input id="orderPlanYear" type="number" class="form-control" required>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Số lượng sản xuất</label>
+                            <label class="form-label" data-i18n="production.form.quantity">Số lượng sản xuất</label>
                             <input id="orderQuantity" type="number" step="0.01" class="form-control" required>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Trạng thái</label>
+                            <label class="form-label" data-i18n="production.form.status">Trạng thái</label>
                             <select id="orderStatus" class="form-select">
                                 <option value="INITIAL">INITIAL</option>
                                 <option value="ACTIVE">ACTIVE</option>
@@ -170,13 +170,13 @@
                             </select>
                         </div>
                         <div class="col-md-4 d-flex align-items-end">
-                            <small class="text-muted">Trạng thái ảnh hưởng trực tiếp tới MPS.</small>
+                            <small class="text-muted" data-i18n="production.form.statusNote">Trạng thái ảnh hưởng trực tiếp tới MPS.</small>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
-                    <button type="button" id="btnSaveOrder" class="btn btn-primary">Lưu</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="production.close">Đóng</button>
+                    <button type="button" id="btnSaveOrder" class="btn btn-primary" data-i18n="production.save">Lưu</button>
                 </div>
             </div>
         </div>
@@ -256,7 +256,7 @@
                 const td = document.createElement("td");
                 td.colSpan = 9;
                 td.className = "text-center text-muted py-4";
-                td.textContent = "Chưa có đơn sản xuất nào.";
+                td.textContent = window.I18n?.t("production.noOrders") || "Chưa có đơn sản xuất nào.";
                 tr.appendChild(td);
                 body.appendChild(tr);
                 return;
@@ -301,8 +301,8 @@
                 const actionTd = document.createElement("td");
                 actionTd.className = "text-end";
                 actionTd.innerHTML = `
-                    <button class="btn btn-sm btn-outline-primary me-1">Sửa</button>
-                    <button class="btn btn-sm btn-outline-danger">Xóa</button>
+                    <button class="btn btn-sm btn-outline-primary me-1">${window.I18n?.t("production.edit") || "Sửa"}</button>
+                    <button class="btn btn-sm btn-outline-danger">${window.I18n?.t("production.delete") || "Xóa"}</button>
                 `;
                 const [editBtn, delBtn] = actionTd.querySelectorAll("button");
                 editBtn.addEventListener("click", () => openEditModal(o));
@@ -325,7 +325,7 @@
 
         function openAddModal() {
             resetForm();
-            document.getElementById("orderModalTitle").textContent = "Thêm đơn sản xuất";
+            document.getElementById("orderModalTitle").textContent = window.I18n?.t("production.modalTitle") || "Thêm đơn sản xuất";
             const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById("orderModal"));
             modal.show();
         }
@@ -333,7 +333,7 @@
         function openEditModal(order) {
             resetForm();
             currentEditing = order;
-            document.getElementById("orderModalTitle").textContent = "Chỉnh sửa đơn sản xuất";
+            document.getElementById("orderModalTitle").textContent = window.I18n?.t("production.editTitle") || "Chỉnh sửa đơn sản xuất";
             document.getElementById("orderId").value = order.id;
             document.getElementById("orderProductId").value = order.ProductId || order.productId;
             document.getElementById("orderPlanWeek").value = order.PlanWeek;
@@ -353,7 +353,7 @@
             const status = document.getElementById("orderStatus").value;
 
             if (!productId || !planWeek || !planYear || !quantity) {
-                alert("Vui lòng nhập đầy đủ thông tin bắt buộc.");
+                alert(window.I18n?.t("production.validationRequired") || "Vui lòng nhập đầy đủ thông tin bắt buộc.");
                 return;
             }
 
@@ -390,7 +390,7 @@
         }
 
         async function onDeleteOrder(order) {
-            if (!confirm(`Xóa đơn sản xuất #${order.id}?`)) return;
+            if (!confirm((window.I18n?.t("production.confirmDelete") || "Xóa đơn sản xuất #{{id}}?").replace("{{id}}", order.id))) return;
             try {
                 const res = await fetch(API_BASE + `/api/production-orders/${order.id}`, {
                     method: "DELETE"
@@ -399,7 +399,7 @@
                 await loadOrders();
             } catch (err) {
                 console.error(err);
-                alert("Xóa đơn sản xuất thất bại.");
+                alert(window.I18n?.t("production.deleteFailed") || "Xóa đơn sản xuất thất bại.");
             }
         }
 

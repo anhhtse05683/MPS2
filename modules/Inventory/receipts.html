@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phiếu nhập kho</title>
+    <title data-i18n="inventory.receipts">Phiếu nhập kho</title>
+    <script src="/modules/assets/js/i18n.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <script src="/modules/assets/js/auth.js"></script>
@@ -15,20 +16,20 @@
 </head>
 <body>
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+        <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i><span data-i18n="common.back">Quay lại</span></a>
     </div>
     <div class="card">
-        <div class="card-header"><h5 class="mb-0"><i class="bi bi-box-arrow-in-down me-2"></i>Phiếu nhập kho NVL (từ phiếu mua hàng)</h5></div>
+        <div class="card-header"><h5 class="mb-0"><i class="bi bi-box-arrow-in-down me-2"></i><span data-i18n="inventory.receiptsTitle">Phiếu nhập kho NVL (từ phiếu mua hàng)</span></h5></div>
         <div class="card-body">
-            <p class="small text-muted mb-3">Khi phiếu mua hàng được duyệt (CONFIRM), hệ thống tự động tạo phiếu nhập kho. Nhân viên kho xác nhận khi hàng được giao đến để cộng tồn kho.</p>
+            <p class="small text-muted mb-3" data-i18n="inventory.receiptsHint">Khi phiếu mua hàng được duyệt (CONFIRM), hệ thống tự động tạo phiếu nhập kho. Nhân viên kho xác nhận khi hàng được giao đến để cộng tồn kho.</p>
             <div class="d-flex gap-2 mb-3">
-                <select id="status" class="form-select form-select-sm" style="width:150px;"><option value="">Tất cả</option><option value="DRAFT">DRAFT</option><option value="CONFIRM">CONFIRM</option></select>
-                <select id="warehouseId" class="form-select form-select-sm" style="width:200px;"><option value="">Tất cả kho</option></select>
-                <button id="btnLoad" class="btn btn-primary btn-sm">Tải</button>
+                <select id="status" class="form-select form-select-sm" style="width:150px;"><option value="" data-i18n="common.all">Tất cả</option><option value="DRAFT">DRAFT</option><option value="CONFIRM">CONFIRM</option></select>
+                <select id="warehouseId" class="form-select form-select-sm" style="width:200px;"><option value="" data-i18n="inventory.allWarehouses">Tất cả kho</option></select>
+                <button id="btnLoad" class="btn btn-primary btn-sm" data-i18n="inventory.load">Tải</button>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0 table-sm">
-                    <thead><tr><th>Số phiếu</th><th>Kho</th><th>Đơn mua</th><th>Nhà cung cấp</th><th>Ngày nhập</th><th>Trạng thái</th><th>Người tạo</th><th>Thao tác</th></tr></thead>
+                    <thead><tr><th data-i18n="inventory.ticketNumber">Số phiếu</th><th data-i18n="inventory.tableWarehouse">Kho</th><th data-i18n="inventory.purchaseOrder">Đơn mua</th><th data-i18n="inventory.supplier">Nhà cung cấp</th><th data-i18n="inventory.receiptDate">Ngày nhập</th><th data-i18n="inventory.tableStatus">Trạng thái</th><th data-i18n="inventory.tableCreatedBy">Người tạo</th><th data-i18n="common.actions">Thao tác</th></tr></thead>
                     <tbody id="tbody"></tbody>
                 </table>
             </div>
@@ -66,23 +67,24 @@
                         <td>${r.receiptDate ? new Date(r.receiptDate).toLocaleDateString("vi-VN") : "-"}</td>
                         <td><span class="badge ${(r.status || r.Status) === 'CONFIRM' ? 'bg-success' : 'bg-warning text-dark'}">${r.status || r.Status || ""}</span></td>
                         <td class="small">${r.createdByName || r.CreatedByName || "-"}</td>
-                        <td>${canConfirm && (r.status || r.Status) === 'DRAFT' ? `<button class="btn btn-sm btn-success" onclick="confirmReceipt(${r.id})">Xác nhận nhập kho</button>` : ""}</td>
+                        <td>${canConfirm && (r.status || r.Status) === 'DRAFT' ? `<button class="btn btn-sm btn-success" onclick="confirmReceipt(${r.id})">` + (window.I18n?.t("inventory.confirmReceipt") || "Xác nhận nhập kho") + `</button>` : ""}</td>
                     </tr>
-                `).join("") : "<tr><td colspan='8' class='text-center text-muted py-4'>Chưa có phiếu nào</td></tr>";
+                `).join("") : "<tr><td colspan='8' class='text-center text-muted py-4'>" + (window.I18n?.t("inventory.noTickets") || "Chưa có phiếu nào") + "</td></tr>";
             } catch (err) {
                 document.getElementById("tbody").innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4">${err.message}</td></tr>`;
             }
         }
         async function confirmReceipt(id) {
-            if (!confirm("Xác nhận hàng đã đến và nhập kho? Số dư tồn kho sẽ được cộng thêm.")) return;
+            if (!confirm(window.I18n?.t("inventory.confirmReceiptMsg") || "Xác nhận hàng đã đến và nhập kho? Số dư tồn kho sẽ được cộng thêm.")) return;
             try {
                 await fetchJson("/api/stock-receipts/" + id + "/confirm", { method: "POST", headers: { "Content-Type": "application/json" } });
-                alert("Đã xác nhận nhập kho!");
+                alert(window.I18n?.t("inventory.receiptConfirmed") || "Đã xác nhận nhập kho!");
                 load();
-            } catch (err) { alert("Lỗi: " + err.message); }
+            } catch (err) { alert((window.I18n?.t("inventory.loadError") || "Lỗi: ") + err.message); }
         }
         document.getElementById("btnLoad").onclick = load;
         loadWarehouses().then(load);
+        document.addEventListener("languageChanged", () => window.I18n?.updatePage?.());
     </script>
 </body>
 </html>

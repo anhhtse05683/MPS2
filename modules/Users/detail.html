@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chi tiết Người dùng</title>
+  <title data-i18n="users.detailTitle">Chi tiết Người dùng</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <script src="/modules/assets/js/auth.js"></script>
@@ -11,50 +11,50 @@
 </head>
 <body class="p-3" style="background:#f8fafc;">
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <a href="/modules/Users/index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+    <a href="/modules/Users/index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i><span data-i18n="common.back">Quay lại</span></a>
     <div>
-      <button id="btnSave" class="btn btn-primary btn-sm"><i class="bi bi-save me-1"></i>Lưu</button>
-      <button id="btnCancel" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg me-1"></i>Hủy</button>
+      <button id="btnSave" class="btn btn-primary btn-sm"><i class="bi bi-save me-1"></i><span data-i18n="common.save">Lưu</span></button>
+      <button id="btnCancel" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg me-1"></i><span data-i18n="common.cancel">Hủy</span></button>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-header bg-primary text-white"><h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Thông tin Người dùng</h5></div>
+    <div class="card-header bg-primary text-white"><h5 class="mb-0"><i class="bi bi-person-badge me-2"></i><span data-i18n="users.userInfo">Thông tin Người dùng</span></h5></div>
     <div class="card-body">
       <div class="row g-3">
         <div class="col-md-4">
-          <label class="form-label">Username <span class="text-danger">*</span></label>
-          <input type="text" id="username" class="form-control" placeholder="Username" required>
+          <label class="form-label"><span data-i18n="users.form.username">Username</span> <span class="text-danger">*</span></label>
+          <input type="text" id="username" class="form-control" data-i18n="users.form.usernamePlaceholder" placeholder="Username" required>
         </div>
         <div class="col-md-4">
-          <label class="form-label">Họ tên <span class="text-danger">*</span></label>
-          <input type="text" id="fullName" class="form-control" placeholder="Họ tên đầy đủ" required>
+          <label class="form-label"><span data-i18n="users.form.fullName">Họ tên</span> <span class="text-danger">*</span></label>
+          <input type="text" id="fullName" class="form-control" data-i18n="users.form.fullNamePlaceholder" placeholder="Họ tên đầy đủ" required>
         </div>
         <div class="col-md-4">
-          <label class="form-label">Mật khẩu <span id="pwdRequired" class="text-danger">*</span></label>
-          <input type="password" id="password" class="form-control" placeholder="Để trống nếu không đổi">
+          <label class="form-label"><span data-i18n="users.form.password">Mật khẩu</span> <span id="pwdRequired" class="text-danger">*</span></label>
+          <input type="password" id="password" class="form-control" data-i18n="users.form.passwordPlaceholder" placeholder="Để trống nếu không đổi">
         </div>
         <div class="col-md-4">
-          <label class="form-label">Email</label>
-          <input type="email" id="email" class="form-control" placeholder="email@example.com">
+          <label class="form-label" data-i18n="users.form.email">Email</label>
+          <input type="email" id="email" class="form-control" data-i18n="users.form.emailPlaceholder" placeholder="email@example.com">
         </div>
         <div class="col-md-4">
-          <label class="form-label">Số điện thoại</label>
-          <input type="text" id="phone" class="form-control" placeholder="SĐT">
+          <label class="form-label" data-i18n="users.form.phone">Số điện thoại</label>
+          <input type="text" id="phone" class="form-control" data-i18n="users.form.phonePlaceholder" placeholder="SĐT">
         </div>
         <div class="col-md-4">
-          <label class="form-label">Phòng ban</label>
-          <select id="deptId" class="form-select"><option value="">-- Chọn --</option></select>
+          <label class="form-label" data-i18n="users.form.dept">Phòng ban</label>
+          <select id="deptId" class="form-select"><option value="" data-i18n="users.form.selectDept">-- Chọn --</option></select>
         </div>
         <div class="col-md-4">
-          <label class="form-label">Trạng thái</label>
+          <label class="form-label" data-i18n="users.form.status">Trạng thái</label>
           <select id="isActive" class="form-select">
-            <option value="1">Hoạt động</option>
-            <option value="0">Không hoạt động</option>
+            <option value="1" data-i18n="users.active">Hoạt động</option>
+            <option value="0" data-i18n="users.inactive">Không hoạt động</option>
           </select>
         </div>
         <div class="col-12">
-          <label class="form-label">Vai trò (Roles)</label>
+          <label class="form-label" data-i18n="users.form.roles">Vai trò (Roles)</label>
           <div id="rolesContainer" class="d-flex flex-wrap gap-2"></div>
         </div>
       </div>
@@ -68,7 +68,7 @@
 
     async function fetchJson(url, opts = {}) {
       const res = await fetch(url, opts);
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || (window.I18n?.t("users.requestFailed") || "Request failed")); }
       return res.json();
     }
 
@@ -116,7 +116,7 @@
         });
         updateRoleIds();
       } catch (err) {
-        alert("Lỗi: " + err.message);
+        alert((window.I18n?.t("users.loadError") || "Lỗi tải dữ liệu: ") + err.message);
         location.href = "/modules/Users/index.html";
       }
     }
@@ -125,8 +125,8 @@
       const username = document.getElementById("username").value.trim();
       const fullName = document.getElementById("fullName").value.trim();
       const password = document.getElementById("password").value;
-      if (!username || !fullName) { alert("Vui lòng nhập Username và Họ tên"); return; }
-      if (!userId && !password) { alert("Vui lòng nhập mật khẩu"); return; }
+      if (!username || !fullName) { alert(window.I18n?.t("users.validationUsernameFullName") || "Vui lòng nhập Username và Họ tên"); return; }
+      if (!userId && !password) { alert(window.I18n?.t("users.validationPassword") || "Vui lòng nhập mật khẩu"); return; }
 
       const payload = {
         username: username,
@@ -142,21 +142,22 @@
       try {
         if (userId) {
           await fetchJson("/api/users/" + userId, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-          alert("Cập nhật thành công!");
+          alert(window.I18n?.t("users.updateSuccess") || "Cập nhật thành công!");
         } else {
           const res = await fetchJson("/api/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-          alert("Tạo thành công!");
+          alert(window.I18n?.t("users.createSuccess") || "Tạo thành công!");
           location.href = "/modules/Users/detail.html?id=" + res.id;
           return;
         }
         loadUser();
-      } catch (err) { alert("Lỗi: " + err.message); }
+      } catch (err) { alert((window.I18n?.t("users.loadError") || "Lỗi: ") + err.message); }
     };
 
-    document.getElementById("btnCancel").onclick = () => { if (confirm("Hủy không lưu?")) location.href = "/modules/Users/index.html"; };
+    document.getElementById("btnCancel").onclick = () => { if (confirm(window.I18n?.t("users.confirmCancel") || "Hủy không lưu?")) location.href = "/modules/Users/index.html"; };
 
     loadDepts();
     loadRoles().then(() => loadUser());
+    document.addEventListener("languageChanged", () => window.I18n?.updatePage?.());
   </script>
 </body>
 </html>

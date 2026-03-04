@@ -8,6 +8,10 @@ const http = require("http");
 const { Server } = require("socket.io");
 const { getPool, sql } = require("./src/db");
 const auth = require("./src/auth");
+const PDFDocument = require("pdfkit");
+
+const FONT_DEJAVU = path.join(__dirname, "node_modules", "dejavu-fonts-ttf", "ttf", "DejaVuSans.ttf");
+const FONT_DEJAVU_BOLD = path.join(__dirname, "node_modules", "dejavu-fonts-ttf", "ttf", "DejaVuSans-Bold.ttf");
 
 const app = express();
 const server = http.createServer(app);
@@ -1693,6 +1697,92 @@ app.get("/api/purchase-orders/:id/lines", auth.requirePermission("purchase.view"
   }
 });
 
+// Invoice PDF cho phiếu mua hàng
+app.get("/api/purchase-orders/:id/invoice-pdf", auth.authMiddleware, auth.requirePermission("purchase.view"), async (req, res) => {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const pool = await getPool();
+    const header = await pool.request().input("id", sql.Int, id).query(`
+      SELECT po.PONumber, po.InvoiceNumber, po.SupplierName, po.CustomerCode, po.WarehouseCode, po.Currency,
+             po.InvoiceDate, po.TotalAmount, po.Status, po.CreatedBy, po.AssignedTo
+      FROM PurchaseOrders po WHERE po.PurchaseOrderId = @id
+    `);
+    if (!header.recordset.length) return res.status(404).json({ error: "Purchase order not found" });
+    const po = header.recordset[0];
+    const linesData = await pool.request().input("id", sql.Int, id).query(`
+      SELECT pol.MaterialId, m.MaterialCode, m.MaterialName, pol.Quantity, pol.Unit, pol.UnitPrice, pol.TotalAmount, pol.EtaDate
+      FROM PurchaseOrderLines pol
+      JOIN Materials m ON m.MaterialId = pol.MaterialId
+      WHERE pol.PurchaseOrderId = @id ORDER BY pol.PurchaseOrderLineId
+    `);
+    const lines = linesData.recordset || [];
+
+    const doc = new PDFDocument({ margin: 50 });
+    doc.registerFont("DejaVu", FONT_DEJAVU);
+    doc.registerFont("DejaVuBold", FONT_DEJAVU_BOLD);
+    doc.font("DejaVu");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="Invoice-PO-${po.PONumber || id}.pdf"`);
+    doc.pipe(res);
+
+    doc.font("DejaVuBold").fontSize(18).text("PHIẾU MUA HÀNG / PURCHASE ORDER", { align: "center" });
+    doc.moveDown();
+    doc.font("DejaVu").fontSize(10);
+    doc.text(`Số PO: ${po.PONumber || "-"}`, 50, doc.y);
+    doc.text(`Số Invoice: ${po.InvoiceNumber || "-"}`, 300, doc.y - doc.currentLineHeight());
+    doc.moveDown();
+    doc.text(`Nhà cung cấp: ${po.SupplierName || "-"}`, 50, doc.y);
+    doc.text(`Mã NCC: ${po.CustomerCode || "-"}`, 300, doc.y - doc.currentLineHeight());
+    doc.moveDown();
+    doc.text(`Kho nhận: ${po.WarehouseCode || "-"}`, 50, doc.y);
+    doc.text(`Ngày: ${po.InvoiceDate ? String(po.InvoiceDate).slice(0, 10) : "-"}`, 300, doc.y - doc.currentLineHeight());
+    doc.text(`Tiền tệ: ${po.Currency || "VND"}`, 450, doc.y - doc.currentLineHeight());
+    doc.moveDown(2);
+
+    const tableTop = doc.y;
+    doc.font("DejaVuBold").fontSize(9);
+    doc.text("#", 50, tableTop);
+    doc.text("Mã NVL", 70, tableTop);
+    doc.text("Tên", 150, tableTop);
+    doc.text("SL", 320, tableTop);
+    doc.text("Đơn vị", 360, tableTop);
+    doc.text("Đơn giá", 400, tableTop);
+    doc.text("Thành tiền", 470, tableTop);
+    doc.moveDown(0.5);
+    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown(0.3);
+    doc.font("DejaVu").fontSize(9);
+
+    let y = doc.y;
+    lines.forEach((line, i) => {
+      const qty = parseFloat(line.Quantity) || 0;
+      const price = parseFloat(line.UnitPrice) || 0;
+      const total = parseFloat(line.TotalAmount) || 0;
+      doc.text(String(i + 1), 50, y);
+      doc.text(line.MaterialCode || "-", 70, y);
+      doc.text((line.MaterialName || "").slice(0, 25), 150, y);
+      doc.text(qty.toLocaleString(undefined, { maximumFractionDigits: 3 }), 320, y);
+      doc.text(line.Unit || "PCS", 360, y);
+      doc.text(price.toLocaleString(undefined, { maximumFractionDigits: 3 }), 400, y);
+      doc.text(total.toLocaleString(undefined, { maximumFractionDigits: 0 }), 470, y);
+      y += 18;
+    });
+    doc.y = y + 5;
+    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown(0.5);
+    doc.font("DejaVuBold");
+    doc.text(`TỔNG CỘNG: ${parseFloat(po.TotalAmount || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${po.Currency || "VND"}`, 400, doc.y);
+    doc.moveDown(2);
+    doc.font("DejaVu").fontSize(8);
+    doc.text(`Người tạo: ${po.CreatedBy || "-"} | Người phụ trách: ${po.AssignedTo || "-"}`, 50, doc.y);
+    doc.end();
+  } catch (err) {
+    console.error("[Invoice PDF Error]", err);
+    res.status(500).json({ error: err.message || "Failed to generate PDF" });
+  }
+});
+
 app.post("/api/purchase-orders", auth.requirePermission("purchase.add"), async (req, res) => {
   const {
     poNumber,
@@ -2631,6 +2721,29 @@ app.put("/api/sales-plan", auth.requirePermission("mps.edit"), async (req, res) 
 });
 
 // -------- Partners (Khách hàng + Nhà cung cấp) ----------
+// Danh sách NCC cho module Mua hàng - chỉ cần đăng nhập
+app.get("/api/partners/suppliers", auth.authMiddleware, async (req, res) => {
+  const search = (req.query.search || "").trim();
+  const limit = Math.min(100, Math.max(5, parseIntSafe(req.query.limit) || 50));
+  try {
+    const pool = await getPool();
+    const request = pool.request().input("limit", sql.Int, limit);
+    let whereSql = "WHERE PartnerType = 'S'";
+    if (search) {
+      request.input("search", sql.NVarChar, `%${search}%`);
+      whereSql += " AND (PartnerCode LIKE @search OR PartnerName LIKE @search OR Email LIKE @search)";
+    }
+    const result = await request.query(`
+      SELECT TOP (@limit) PartnerId AS id, PartnerCode AS code, PartnerName AS name, Email AS email
+      FROM Partners ${whereSql}
+      ORDER BY PartnerCode
+    `);
+    res.json({ items: result.recordset });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/partners", auth.requirePermission("partners.view"), async (req, res) => {
   const type = (req.query.type || "").toUpperCase(); // 'C' | 'S' | ''
   const search = (req.query.search || "").trim();
@@ -2682,6 +2795,25 @@ app.get("/api/partners", auth.requirePermission("partners.view"), async (req, re
   }
 });
 
+app.get("/api/partners/by-code/:code", auth.authMiddleware, async (req, res) => {
+  const code = (req.params.code || "").trim();
+  const type = (req.query.type || "S").toUpperCase();
+  if (!code) return res.status(400).json({ error: "Code required" });
+  try {
+    const pool = await getPool();
+    const result = await pool.request()
+      .input("code", sql.NVarChar, code)
+      .input("type", sql.Char(1), type)
+      .query(`SELECT PartnerId AS id, PartnerCode AS code, PartnerName AS name, Email AS email,
+        Country AS country, InvoiceLanguage AS invoiceLanguage
+        FROM Partners WHERE PartnerCode = @code AND PartnerType = @type`);
+    if (!result.recordset.length) return res.status(404).json({ error: "Partner not found" });
+    res.json(result.recordset[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/partners/:id", auth.requirePermission("partners.view"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
@@ -2690,6 +2822,7 @@ app.get("/api/partners/:id", auth.requirePermission("partners.view"), async (req
     const result = await pool.request().input("id", sql.Int, id).query(`
       SELECT PartnerId AS id, PartnerCode AS code, PartnerName AS name, PartnerType AS type,
              TaxCode AS taxCode, Representative AS representative, Phone AS phone, Email AS email, Address AS address,
+             Country AS country, InvoiceLanguage AS invoiceLanguage,
              CreatedBy AS createdBy, CreatedAt AS createdAt, UpdatedBy AS updatedBy, UpdatedAt AS updatedAt
       FROM Partners WHERE PartnerId = @id;
     `);
@@ -2703,7 +2836,7 @@ app.get("/api/partners/:id", auth.requirePermission("partners.view"), async (req
 });
 
 app.post("/api/partners", auth.requirePermission("partners.add"), async (req, res) => {
-  const { code, name, type, taxCode, representative, phone, email, address, createdBy } = req.body || {};
+  const { code, name, type, taxCode, representative, phone, email, address, country, invoiceLanguage, createdBy } = req.body || {};
   const partnerType = (type || "C").toUpperCase();
   if (!["C", "S"].includes(partnerType))
     return res.status(400).json({ error: "type must be C (Customer) or S (Supplier)" });
@@ -2712,6 +2845,8 @@ app.post("/api/partners", auth.requirePermission("partners.add"), async (req, re
 
   try {
     const pool = await getPool();
+    const invLang = (invoiceLanguage || "").toUpperCase();
+    const validInvLang = ["VI", "EN"].includes(invLang) ? invLang : null;
     const result = await pool
       .request()
       .input("code", sql.NVarChar, code)
@@ -2722,10 +2857,12 @@ app.post("/api/partners", auth.requirePermission("partners.add"), async (req, re
       .input("phone", sql.NVarChar, phone || null)
       .input("email", sql.NVarChar, email || null)
       .input("address", sql.NVarChar, address || null)
+      .input("country", sql.NVarChar, (country || "").trim().slice(0, 2) || null)
+      .input("invoiceLanguage", sql.Char(2), validInvLang)
       .input("createdBy", sql.NVarChar, createdBy || null).query(`
-        INSERT INTO Partners (PartnerCode, PartnerName, PartnerType, TaxCode, Representative, Phone, Email, Address, CreatedBy)
+        INSERT INTO Partners (PartnerCode, PartnerName, PartnerType, TaxCode, Representative, Phone, Email, Address, Country, InvoiceLanguage, CreatedBy)
         OUTPUT INSERTED.PartnerId AS id
-        VALUES (@code, @name, @type, @taxCode, @representative, @phone, @email, @address, @createdBy);
+        VALUES (@code, @name, @type, @taxCode, @representative, @phone, @email, @address, @country, @invoiceLanguage, @createdBy);
       `);
     const partnerId = result.recordset[0].id;
     await logActivity(pool, req, { menuCode: "partners", action: "CREATE", entityType: "Partner", entityId: partnerId, entitySummary: name ? `${code} - ${name}` : `Partner #${partnerId}` });
@@ -2740,7 +2877,7 @@ app.post("/api/partners", auth.requirePermission("partners.add"), async (req, re
 
 app.put("/api/partners/:id", auth.requirePermission("partners.edit"), async (req, res) => {
   const id = parseIntSafe(req.params.id);
-  const { code, name, type, taxCode, representative, phone, email, address, updatedBy } = req.body || {};
+  const { code, name, type, taxCode, representative, phone, email, address, country, invoiceLanguage, updatedBy } = req.body || {};
   if (!id) return res.status(400).json({ error: "Invalid id" });
 
   try {
@@ -2758,8 +2895,15 @@ app.put("/api/partners/:id", auth.requirePermission("partners.edit"), async (req
     if (phone !== undefined) request.input("phone", sql.NVarChar, phone || null);
     if (email !== undefined) request.input("email", sql.NVarChar, email || null);
     if (address !== undefined) request.input("address", sql.NVarChar, address || null);
+    if (country !== undefined) request.input("country", sql.NVarChar, (country || "").trim().slice(0, 2) || null);
+    if (invoiceLanguage !== undefined) {
+      const invLang = (invoiceLanguage || "").toUpperCase();
+      request.input("invoiceLanguage", sql.Char(2), ["VI", "EN"].includes(invLang) ? invLang : null);
+    }
     request.input("updatedBy", sql.NVarChar, updatedBy || null);
 
+    const setCountry = country !== undefined ? "Country = @country," : "";
+    const setInvLang = invoiceLanguage !== undefined ? "InvoiceLanguage = @invoiceLanguage," : "";
     await request.query(`
       UPDATE Partners
       SET PartnerCode = COALESCE(@code, PartnerCode),
@@ -2770,6 +2914,7 @@ app.put("/api/partners/:id", auth.requirePermission("partners.edit"), async (req
           Phone = @phone,
           Email = @email,
           Address = @address,
+          ${setCountry}${setInvLang}
           UpdatedBy = @updatedBy,
           UpdatedAt = SYSDATETIME()
       WHERE PartnerId = @id;

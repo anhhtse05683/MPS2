@@ -134,11 +134,11 @@
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label" data-i18n="bom.productCode">Mã SP</label>
-            <input type="text" id="newProductCode" class="form-control" placeholder="VD: SP001">
+            <input type="text" id="newProductCode" class="form-control" data-i18n="bom.productPlaceholder" placeholder="VD: SP001">
           </div>
           <div class="mb-3">
             <label class="form-label" data-i18n="bom.productName">Tên sản phẩm</label>
-            <input type="text" id="newProductName" class="form-control" placeholder="Tên thành phẩm">
+            <input type="text" id="newProductName" class="form-control" data-i18n="bom.productNamePlaceholder" placeholder="Tên thành phẩm">
           </div>
         </div>
         <div class="modal-footer">
@@ -233,7 +233,7 @@
         document.getElementById("totalInfo").textContent = (window.I18n?.t("bom.total") || "Tổng") + ": " + totalItems + " " + (window.I18n?.t("bom.records") || "bản ghi");
       } catch (err) {
         console.error("[BOM] loadProducts failed:", err);
-        document.getElementById("productsBody").innerHTML = '<tr><td colspan="3" class="text-center text-danger">' + (err.message || "Lỗi tải dữ liệu") + "</td></tr>";
+        document.getElementById("productsBody").innerHTML = '<tr><td colspan="3" class="text-center text-danger">' + (err.message || (window.I18n?.t("bom.loadError") || "Lỗi tải dữ liệu")) + "</td></tr>";
       }
     }
 
@@ -289,7 +289,7 @@
         renderBomDetail(data);
         bootstrap.Modal.getOrCreateInstance(document.getElementById("bomDetailModal")).show();
       } catch (err) {
-        alert(err.message || "Lỗi tải BOM");
+        alert(err.message || (window.I18n?.t("bom.saveError") || "Lỗi tải BOM"));
       }
     }
 
@@ -453,7 +453,7 @@
         alert(window.I18n?.t("bom.noChanges") || "Không có thay đổi để lưu");
         return;
       }
-      if (!currentProductId) { alert("Lỗi: Chưa chọn sản phẩm"); return; }
+      if (!currentProductId) { alert(window.I18n?.t("bom.selectProductRequired") || "Lỗi: Chưa chọn sản phẩm"); return; }
       try {
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (window.I18n?.t("common.saving") || "Đang lưu...");
@@ -485,7 +485,7 @@
           openBomDetail(currentProductId);
         }
       } catch (err) {
-        alert(err.message || "Lỗi lưu");
+        alert(err.message || (window.I18n?.t("bom.saveError") || "Lỗi lưu"));
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-check-lg me-1"></i><span data-i18n="common.save">Lưu</span>';

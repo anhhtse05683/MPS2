@@ -1,11 +1,16 @@
 /**
- * Client-side Auth: JWT + Refresh, localStorage
+ * Client-side Auth: JWT + Refresh, localStorage, idle timeout
  */
 const Auth = {
   KEY_ACCESS: "erp_access_token",
   KEY_REFRESH: "erp_refresh_token",
   KEY_USER: "erp_user",
   KEY_PERMISSIONS: "erp_permissions",
+
+  /** Thời gian không hoạt động (ms) trước khi tự động đăng xuất. Mặc định 30 phút. */
+  IDLE_TIMEOUT_MS: 30 * 60 * 1000,
+  _idleTimerId: null,
+  _idleListenersAttached: false,
 
   getAccessToken() {
     return localStorage.getItem(this.KEY_ACCESS);
@@ -32,12 +37,51 @@ const Auth = {
     if (data.refreshToken) localStorage.setItem(this.KEY_REFRESH, data.refreshToken);
     if (data.user) localStorage.setItem(this.KEY_USER, JSON.stringify(data.user));
     if (data.permissions) localStorage.setItem(this.KEY_PERMISSIONS, JSON.stringify(data.permissions));
+    this.startIdleTimer();
   },
   clearSession() {
+    this.clearIdleTimer();
     localStorage.removeItem(this.KEY_ACCESS);
     localStorage.removeItem(this.KEY_REFRESH);
     localStorage.removeItem(this.KEY_USER);
     localStorage.removeItem(this.KEY_PERMISSIONS);
+  },
+
+  startIdleTimer() {
+    if (!this.isLoggedIn()) return;
+    if (typeof window !== "undefined" && window.location?.pathname?.indexOf("/modules/Login") !== -1) return;
+    this.clearIdleTimer();
+    this._idleTimerId = setTimeout(() => {
+      this._idleTimerId = null;
+      this.onIdle();
+    }, this.IDLE_TIMEOUT_MS);
+  },
+  clearIdleTimer() {
+    if (this._idleTimerId) {
+      clearTimeout(this._idleTimerId);
+      this._idleTimerId = null;
+    }
+  },
+  resetIdleTimer() {
+    if (this.isLoggedIn()) this.startIdleTimer();
+  },
+  onIdle() {
+    this.clearSession();
+    const path = typeof window !== "undefined" ? window.location?.pathname || "" : "";
+    if (path.indexOf("/modules/Login") === -1) {
+      const url = window.location.href;
+      window.location.href = "/modules/Login/index.html?redirect=" + encodeURIComponent(url) + "&reason=idle";
+    }
+  },
+  initIdleTimer() {
+    if (this._idleListenersAttached) return;
+    this._idleListenersAttached = true;
+    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
+    const reset = () => this.resetIdleTimer();
+    events.forEach((ev) => document.addEventListener(ev, reset, { passive: true }));
+    if (this.isLoggedIn() && window.location?.pathname?.indexOf("/modules/Login") === -1) {
+      this.startIdleTimer();
+    }
   },
   isLoggedIn() {
     return !!this.getAccessToken();
@@ -100,3 +144,11 @@ window.fetch = function (url, options = {}) {
 };
 
 window.Auth = Auth;
+
+if (typeof document !== "undefined") {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => Auth.initIdleTimer());
+  } else {
+    Auth.initIdleTimer();
+  }
+}

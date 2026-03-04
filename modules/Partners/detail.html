@@ -118,6 +118,36 @@
                     <input type="text" id="address" class="form-control" data-i18n="partners.form.addressPlaceholder"
                         placeholder="Địa chỉ đầy đủ">
                 </div>
+                <div class="col-md-4">
+                    <label class="form-label" data-i18n="partners.form.country">Quốc gia</label>
+                    <select id="country" class="form-select">
+                        <option value="" data-i18n="partners.countryNotSelected">— Chưa chọn —</option>
+                        <option value="VN" data-i18n="partners.countries.VN">Việt Nam</option>
+                        <option value="US" data-i18n="partners.countries.US">Hoa Kỳ</option>
+                        <option value="JP" data-i18n="partners.countries.JP">Nhật Bản</option>
+                        <option value="KR" data-i18n="partners.countries.KR">Hàn Quốc</option>
+                        <option value="CN" data-i18n="partners.countries.CN">Trung Quốc</option>
+                        <option value="SG" data-i18n="partners.countries.SG">Singapore</option>
+                        <option value="TH" data-i18n="partners.countries.TH">Thái Lan</option>
+                        <option value="MY" data-i18n="partners.countries.MY">Malaysia</option>
+                        <option value="ID" data-i18n="partners.countries.ID">Indonesia</option>
+                        <option value="PH" data-i18n="partners.countries.PH">Philippines</option>
+                        <option value="TW" data-i18n="partners.countries.TW">Đài Loan</option>
+                        <option value="HK" data-i18n="partners.countries.HK">Hồng Kông</option>
+                        <option value="IN" data-i18n="partners.countries.IN">Ấn Độ</option>
+                        <option value="DE" data-i18n="partners.countries.DE">Đức</option>
+                        <option value="FR" data-i18n="partners.countries.FR">Pháp</option>
+                        <option value="GB" data-i18n="partners.countries.GB">Anh</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" data-i18n="partners.form.invoiceLanguage">Ngôn ngữ Invoice</label>
+                    <select id="invoiceLanguage" class="form-select">
+                        <option value="vi" data-i18n="partners.invoiceLang.vi">Tiếng Việt</option>
+                        <option value="en" data-i18n="partners.invoiceLang.en">English</option>
+                    </select>
+                    <small class="text-muted" data-i18n="partners.form.invoiceLanguageHint">Tự động: VN→Việt, khác→English</small>
+                </div>
             </div>
 
             <div id="metaSection" class="meta-section mt-4" style="display: none;">
@@ -156,9 +186,32 @@
             return res.json();
         }
 
+        function syncInvoiceLanguageFromCountry() {
+            const country = document.getElementById("country").value;
+            const langSelect = document.getElementById("invoiceLanguage");
+            if (country === "VN") {
+                langSelect.value = "vi";
+            } else if (country) {
+                langSelect.value = "en";
+            } else {
+                langSelect.value = "en";
+            }
+        }
+
+        function ensureCountryOption(code) {
+            if (!code) return;
+            const sel = document.getElementById("country");
+            if (sel.querySelector(`option[value="${code}"]`)) return;
+            const opt = document.createElement("option");
+            opt.value = code;
+            opt.textContent = code;
+            sel.appendChild(opt);
+        }
+
         async function loadPartner() {
             if (!partnerId) {
                 document.getElementById("metaSection").style.display = "none";
+                syncInvoiceLanguageFromCountry();
                 return;
             }
             try {
@@ -171,6 +224,11 @@
                 document.getElementById("phone").value = p.phone || "";
                 document.getElementById("email").value = p.email || "";
                 document.getElementById("address").value = p.address || "";
+
+                const countryVal = (p.country || "").toUpperCase().slice(0, 2);
+                ensureCountryOption(countryVal);
+                document.getElementById("country").value = countryVal || "";
+                document.getElementById("invoiceLanguage").value = p.invoiceLanguage || (countryVal === "VN" ? "vi" : "en");
 
                 document.getElementById("createdBy").textContent = p.createdBy || "-";
                 document.getElementById("createdAt").textContent = formatDate(p.createdAt);
@@ -202,6 +260,8 @@
                 phone: document.getElementById("phone").value.trim() || null,
                 email: document.getElementById("email").value.trim() || null,
                 address: document.getElementById("address").value.trim() || null,
+                country: document.getElementById("country").value?.trim().toUpperCase().slice(0, 2) || null,
+                invoiceLanguage: document.getElementById("invoiceLanguage").value || null,
                 createdBy: userDisplay,
                 updatedBy: userDisplay
             };
@@ -235,6 +295,8 @@
                 window.location.href = "/modules/Partners/index.html";
             }
         });
+
+        document.getElementById("country").addEventListener("change", syncInvoiceLanguageFromCountry);
 
         loadPartner();
 
