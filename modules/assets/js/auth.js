@@ -152,3 +152,32 @@ if (typeof document !== "undefined") {
     Auth.initIdleTimer();
   }
 }
+
+// Override alert: hiển thị "Hệ Thống" thay vì origin (localhost/IP)
+(function () {
+  const TITLE = "Hệ Thống";
+  window.alert = function (msg) {
+    const s = String(msg ?? "");
+    const wrap = document.createElement("div");
+    wrap.id = "sysAlertWrap";
+    wrap.setAttribute("role", "dialog");
+    wrap.setAttribute("aria-modal", "true");
+    wrap.setAttribute("aria-labelledby", "sysAlertTitle");
+    wrap.style.cssText =
+      "position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);font-family:system-ui,sans-serif";
+    const box = document.createElement("div");
+    box.style.cssText =
+      "background:#fff;border-radius:8px;padding:1.25rem 1.5rem;min-width:280px;max-width:90vw;box-shadow:0 4px 24px rgba(0,0,0,0.2)";
+    box.innerHTML =
+      '<div id="sysAlertTitle" style="font-weight:600;margin-bottom:0.75rem;font-size:1rem">' +
+      TITLE +
+      '</div><div class="sysAlertMsg" style="margin-bottom:1rem;white-space:pre-wrap;word-break:break-word"></div><button type="button" class="btn btn-primary" id="sysAlertOk">OK</button>';
+    const msgEl = box.querySelector(".sysAlertMsg");
+    msgEl.textContent = s;
+    wrap.appendChild(box);
+    const close = () => wrap.remove();
+    box.querySelector("#sysAlertOk").onclick = close;
+    wrap.onclick = (e) => { if (e.target === wrap) close(); };
+    document.body.appendChild(wrap);
+  };
+})();

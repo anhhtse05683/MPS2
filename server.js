@@ -38,6 +38,7 @@ const upload = multer({
     fileSize: MAX_IMPORT_FILE_SIZE,
   },
 });
+app.set("trust proxy", 1);
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname)); // serve root static files
@@ -52,6 +53,17 @@ app.use("/api", (req, res, next) => {
 const parseIntSafe = (v) =>
   v === undefined || v === null || v === "" ? null : parseInt(v, 10);
 
+/** Lấy IP client từ request (hỗ trợ proxy X-Forwarded-For). */
+function getClientIp(req) {
+  if (!req) return "unknown";
+  const forwarded = req.headers?.["x-forwarded-for"];
+  if (forwarded) {
+    const first = String(forwarded).split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return req.ip || req.connection?.remoteAddress || "unknown";
+}
+
 /** Ghi log thao tác vào ActivityLog. Bỏ qua lỗi nếu bảng chưa có. */
 async function logActivity(pool, req, opts = {}) {
   const { menuCode, menuId, action, entityType, entityId, entitySummary, details } = opts;
@@ -59,6 +71,7 @@ async function logActivity(pool, req, opts = {}) {
   const user = req?.user;
   const userId = user?.UserId ?? null;
   const userName = user?.FullName || user?.Username || null;
+  const clientIP = getClientIp(req);
   try {
     const r = pool.request()
       .input("userId", sql.Int, userId)
@@ -67,17 +80,41 @@ async function logActivity(pool, req, opts = {}) {
       .input("entityType", sql.NVarChar, (entityType || "").slice(0, 50))
       .input("entityId", sql.NVarChar, entityId != null ? String(entityId).slice(0, 50) : null)
       .input("entitySummary", sql.NVarChar, (entitySummary || "").slice(0, 500))
-      .input("details", sql.NVarChar(sql.MAX), details || null);
+      .input("details", sql.NVarChar(sql.MAX), details || null)
+      .input("clientIP", sql.NVarChar, (clientIP || "").slice(0, 45));
     let menuIdVal = menuId;
     if (!menuIdVal && menuCode) {
       const m = await pool.request().input("code", sql.NVarChar, menuCode).query("SELECT MenuId FROM Menus WHERE MenuCode = @code");
       menuIdVal = m.recordset?.[0]?.MenuId ?? null;
     }
     r.input("menuId", sql.Int, menuIdVal);
-    await r.query(`INSERT INTO ActivityLog (UserId, UserName, MenuId, Action, EntityType, EntityId, EntitySummary, Details) 
-      VALUES (@userId, @userName, @menuId, @action, @entityType, @entityId, @entitySummary, @details)`);
+    await r.query(`INSERT INTO ActivityLog (UserId, UserName, MenuId, Action, EntityType, EntityId, EntitySummary, Details, ClientIP) 
+      VALUES (@userId, @userName, @menuId, @action, @entityType, @entityId, @entitySummary, @details, @clientIP)`);
   } catch (e) {
-    if (!/Invalid object name|ActivityLog|Menus/i.test(e.message || "")) console.warn("[logActivity]", e.message);
+    if (!/Invalid object name|ActivityLog|Menus|Invalid column/i.test(e.message || "")) console.warn("[logActivity]", e.message);
+  }
+}
+
+/** Ghi log đăng nhập vào LoginLog (thành công hoặc thất bại). */
+async function logLogin(pool, req, opts = {}) {
+  const { username, userId, success, failReason } = opts;
+  if (!username) return;
+  const clientIP = getClientIp(req);
+  const userAgent = (req?.headers?.["user-agent"] || "").slice(0, 500);
+  try {
+    await pool.request()
+      .input("username", sql.NVarChar, String(username).slice(0, 100))
+      .input("userId", sql.Int, userId ?? null)
+      .input("success", sql.Bit, success ? 1 : 0)
+      .input("clientIP", sql.NVarChar, (clientIP || "").slice(0, 45))
+      .input("userAgent", sql.NVarChar, userAgent || null)
+      .input("failReason", sql.NVarChar, (failReason || "").slice(0, 200))
+      .query(`
+        INSERT INTO LoginLog (Username, UserId, Success, ClientIP, UserAgent, FailReason)
+        VALUES (@username, @userId, @success, @clientIP, @userAgent, @failReason)
+      `);
+  } catch (e) {
+    if (!/Invalid object name|LoginLog/i.test(e.message || "")) console.warn("[logLogin]", e.message);
   }
 }
 
@@ -108,11 +145,13 @@ app.post("/api/auth/login", async (req, res) => {
         FROM Users WHERE Username = @username AND IsActive = 1
       `);
     if (!result.recordset.length) {
+      await logLogin(pool, req, { username, success: false, failReason: "User not found" });
       return res.status(401).json({ error: "Invalid username or password" });
     }
     const user = result.recordset[0];
     const valid = await auth.verifyPassword(password, user.PasswordHash);
     if (!valid) {
+      await logLogin(pool, req, { username, success: false, failReason: "Invalid password" });
       return res.status(401).json({ error: "Invalid username or password" });
     }
     const accessToken = auth.generateAccessToken(user);
@@ -140,6 +179,7 @@ app.post("/api/auth/login", async (req, res) => {
       .query(`SELECT r.RoleCode FROM UserRoles ur JOIN Roles r ON r.RoleId = ur.RoleId WHERE ur.UserId = @userId`);
     let permCodes = (perms.recordset || []).map((p) => p.PermissionCode);
     if ((roles.recordset || []).some((r) => r.RoleCode === "admin")) permCodes = ["admin", ...permCodes];
+    await logLogin(pool, req, { username: user.Username, userId: user.UserId, success: true });
     res.json({
       accessToken,
       refreshToken,
@@ -673,6 +713,7 @@ app.get("/api/history", auth.authMiddleware, async (req, res) => {
         al.Action,
         al.EntityType,
         al.UserName AS performer,
+        al.ClientIP AS clientIP,
         m.DetailUrlPattern,
         m.MenuCode
       FROM ActivityLog al
@@ -699,6 +740,7 @@ app.get("/api/history", auth.authMiddleware, async (req, res) => {
         customerName: "-",
         assignedName: "-",
         performer: r.performer || "-",
+        clientIP: (r.clientIP && r.clientIP !== "-") ? "Hệ Thống" : "-",
         status: "-",
         detailUrl,
       };
@@ -706,8 +748,8 @@ app.get("/api/history", auth.authMiddleware, async (req, res) => {
 
     res.json({ data: rows, total: rows.length, from: fromStr, to: toStr });
   } catch (err) {
-    if (err.message && /Invalid object name 'ActivityLog'|Invalid object name 'Menus'/i.test(err.message)) {
-      return res.status(503).json({ error: "Chạy fix_activity_log.sql trước" });
+    if (err.message && /Invalid object name 'ActivityLog'|Invalid object name 'Menus'|Invalid column name 'ClientIP'/i.test(err.message)) {
+      return res.status(503).json({ error: "Chạy fix_activity_log.sql và fix_activity_log_ip.sql trước" });
     }
     console.error("[History API]", err);
     res.status(500).json({ error: err.message || "Failed to fetch history" });
@@ -1722,8 +1764,15 @@ app.get("/api/purchase-orders/:id/invoice-pdf", auth.authMiddleware, auth.requir
     doc.registerFont("DejaVu", FONT_DEJAVU);
     doc.registerFont("DejaVuBold", FONT_DEJAVU_BOLD);
     doc.font("DejaVu");
+    const raw = String(po.PONumber || id).trim();
+    const safeName = raw
+      .replace(/[^\x20-\x7E]/g, "_")
+      .replace(/[\r\n"]/g, "_")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .slice(0, 60) || "invoice";
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="Invoice-PO-${po.PONumber || id}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="Invoice-PO-${safeName}.pdf"`);
     doc.pipe(res);
 
     doc.font("DejaVuBold").fontSize(18).text("PHIẾU MUA HÀNG / PURCHASE ORDER", { align: "center" });

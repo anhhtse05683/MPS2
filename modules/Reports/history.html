@@ -136,6 +136,7 @@
               <th data-i18n="history.customerName">Tên KH/NCC</th>
               <th data-i18n="history.assignedName">Người phụ trách</th>
               <th data-i18n="history.performer">Người thực hiện</th>
+              <th data-i18n="history.fromSystem">Nguồn</th>
               <th data-i18n="history.status">Trạng thái</th>
             </tr>
           </thead>
@@ -223,6 +224,7 @@
             <td>${r.customerName || "-"}</td>
             <td>${r.assignedName || "-"}</td>
             <td>${r.performer || "-"}</td>
+            <td><span class="text-muted small">${r.clientIP || "-"}</span></td>
             <td><span class="badge bg-${r.status === "CONFIRM" ? "success" : "secondary"}">${r.status || "-"}</span></td>
           </tr>
         `).join("");
@@ -233,7 +235,7 @@
           };
         });
       } catch (err) {
-        document.getElementById("historyBody").innerHTML = `<tr><td colspan="8" class="text-center text-danger">${err.message || (window.I18n?.t("history.loadError") || "Lỗi tải dữ liệu")}</td></tr>`;
+        document.getElementById("historyBody").innerHTML = `<tr><td colspan="9" class="text-center text-danger">${err.message || (window.I18n?.t("history.loadError") || "Lỗi tải dữ liệu")}</td></tr>`;
         document.getElementById("emptyState").style.display = "none";
       }
     }

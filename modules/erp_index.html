@@ -70,27 +70,25 @@
                         </a>
                     </li>
                     <li>
-                        <a href="#" class="menu-item menu-sub-item disabled" title="Phát triển sau"
-                            onclick="return false;">
+                        <a href="#" class="menu-item menu-sub-item disabled" data-coming-soon title="Phát triển sau">
                             <i class="bi bi-bar-chart"></i>
                             <span data-i18n="erp.bomQuota">Tình hình định mức BOM</span>
                             <span class="badge bg-secondary" data-i18n="erp.comingSoon">Sau</span>
                         </a>
                     </li>
                     <li>
-                        <a href="#" class="menu-item menu-sub-item disabled" title="Phát triển sau"
-                            onclick="return false;">
+                        <a href="#" class="menu-item menu-sub-item disabled" data-coming-soon title="Phát triển sau">
                             <i class="bi bi-star"></i>
                             <span data-i18n="erp.bomEval">Đánh giá BOM</span>
                             <span class="badge bg-secondary" data-i18n="erp.comingSoon">Sau</span>
                         </a>
                     </li>
                 </ul>
-                <a href="#quality" class="menu-item">
+                <a href="#" class="menu-item" data-coming-soon>
                     <i class="bi bi-shield-check"></i>
                     <span data-i18n="erp.quality">Quản lý chất lượng</span>
                 </a>
-                <a href="#maintenance" class="menu-item">
+                <a href="#" class="menu-item" data-coming-soon>
                     <i class="bi bi-tools"></i>
                     <span data-i18n="erp.maintenance">Bảo trì thiết bị</span>
                 </a>
@@ -163,15 +161,15 @@
                     <i class="bi bi-clock-history"></i>
                     <span data-i18n="erp.history">Lược sử</span>
                 </a>
-                <a href="#reports" class="menu-item">
+                <a href="#" class="menu-item" data-coming-soon>
                     <i class="bi bi-file-earmark-text"></i>
                     <span data-i18n="erp.reportsSummary">Báo cáo tổng hợp</span>
                 </a>
-                <a href="#analytics" class="menu-item">
+                <a href="#" class="menu-item" data-coming-soon>
                     <i class="bi bi-graph-up"></i>
                     <span data-i18n="erp.analytics">Phân tích dữ liệu</span>
                 </a>
-                <a href="#exports" class="menu-item">
+                <a href="#" class="menu-item" data-coming-soon>
                     <i class="bi bi-download"></i>
                     <span data-i18n="erp.exportReports">Xuất báo cáo</span>
                 </a>
@@ -182,11 +180,11 @@
                     <i class="bi bi-person-gear"></i>
                     <span data-i18n="erp.userManagement">Quản lý người dùng</span>
                 </a>
-                <a href="#settings" class="menu-item">
+                <a href="#settings" class="menu-item enabled" data-src="/modules/Settings/index.html">
                     <i class="bi bi-sliders"></i>
                     <span data-i18n="erp.systemSettings">Cài đặt hệ thống</span>
                 </a>
-                <a href="#help" class="menu-item">
+                <a href="#" class="menu-item" data-coming-soon>
                     <i class="bi bi-question-circle"></i>
                     <span data-i18n="erp.help">Trợ giúp</span>
                 </a>
@@ -705,10 +703,18 @@
         const notificationIcon = document.querySelector('.notification-icon');
         if (notificationIcon) {
             notificationIcon.addEventListener('click', () => {
-                // Add notification dropdown logic here
-                alert('Bạn có 5 thông báo mới!');
+                alert(window.I18n?.t('erp.comingSoonAlert') || 'Coming soon!');
             });
         }
+
+        // Menu coming soon: click hiển thị alert
+        document.querySelectorAll('[data-coming-soon]').forEach(el => {
+            el.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                alert(window.I18n?.t('erp.comingSoonAlert') || 'Coming soon!');
+            });
+        });
 
         // Language selection is now handled in Settings page
 
