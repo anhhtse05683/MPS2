@@ -41,7 +41,7 @@
         <nav class="sidebar-menu">
             <div class="menu-section">
                 <div class="menu-section-title" data-i18n="erp.home">Trang chủ</div>
-                <a href="#dashboard" class="menu-item active" data-src="erp_index.html">
+                <a href="#dashboard" class="menu-item active" data-dashboard>
                     <i class="bi bi-speedometer2"></i>
                     <span data-i18n="erp.dashboard">Dashboard</span>
                 </a>
@@ -597,7 +597,21 @@
                 if (href.startsWith('/modules/')) {
                     return; // let browser navigate
                 }
-                // Keep single-page behavior for hash sections
+                // Dashboard / hash sections: hiển thị nội dung trang chủ, không load iframe
+                if (href.startsWith('#') && (href === '#dashboard' || item.hasAttribute('data-dashboard'))) {
+                    e.preventDefault();
+                    const dashboard = document.getElementById('dashboardContent');
+                    const moduleContainer = document.getElementById('moduleContainer');
+                    const frame = document.getElementById('moduleFrame');
+                    if (moduleContainer) moduleContainer.style.display = 'none';
+                    if (dashboard) dashboard.style.display = 'block';
+                    if (frame) frame.src = 'about:blank';
+                    menuItems.forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    if (location.hash !== '#dashboard') location.hash = 'dashboard';
+                    return;
+                }
+                // Các hash khác (nếu có)
                 if (href.startsWith('#')) {
                     e.preventDefault();
                     const target = document.querySelector(href);
@@ -613,9 +627,24 @@
             });
         });
 
+        function showDashboard() {
+            const dashboard = document.getElementById('dashboardContent');
+            const moduleContainer = document.getElementById('moduleContainer');
+            const frame = document.getElementById('moduleFrame');
+            if (moduleContainer) moduleContainer.style.display = 'none';
+            if (dashboard) dashboard.style.display = 'block';
+            if (frame) frame.src = 'about:blank';
+            menuItems.forEach(i => i.classList.remove('active'));
+            const dashItem = document.querySelector('[data-dashboard]');
+            if (dashItem) dashItem.classList.add('active');
+        }
+
         function restoreModuleFromHash() {
             const hash = (location.hash || '').replace(/^#/, '');
-            if (!hash) return false;
+            if (!hash || hash === 'dashboard') {
+                showDashboard();
+                return true;
+            }
             const params = new URLSearchParams(hash);
             const src = params.get('module');
             if (src) {
@@ -629,7 +658,8 @@
                 }
                 return true;
             }
-            return false;
+            showDashboard();
+            return true;
         }
 
         // Restore module on first load (F5)
@@ -637,15 +667,9 @@
 
         // Restore module when navigating browser history/back/forward
         window.addEventListener('hashchange', () => {
-            // If hash cleared -> back to dashboard
-            if (!location.hash || location.hash === '#') {
-                const dashboard = document.getElementById('dashboardContent');
-                const moduleContainer = document.getElementById('moduleContainer');
-                if (moduleContainer) moduleContainer.style.display = 'none';
-                if (dashboard) dashboard.style.display = 'block';
-                menuItems.forEach(i => i.classList.remove('active'));
-                const first = document.querySelector('.menu-item.active') || document.querySelector('.menu-item');
-                if (first) first.classList.add('active');
+            const hash = (location.hash || '').replace(/^#/, '');
+            if (!hash || hash === 'dashboard') {
+                showDashboard();
                 return;
             }
             restoreModuleFromHash();

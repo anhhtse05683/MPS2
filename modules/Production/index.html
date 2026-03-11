@@ -82,7 +82,8 @@
             <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                 <div>
                     <h4 class="mb-0" data-i18n="production.title">Quản lý Đơn sản xuất</h4>
-                    <small class="text-muted" data-i18n="production.subtitle">Tạo, theo dõi và cập nhật trạng thái Production Orders</small>
+                    <small class="text-muted" data-i18n="production.subtitle">Tạo, theo dõi và cập nhật trạng thái
+                        Production Orders</small>
                 </div>
                 <div class="d-flex toolbar align-items-center flex-wrap">
                     <select id="filterProduct" class="form-select form-select-sm">
@@ -94,17 +95,17 @@
                         style="max-width: 90px;" data-i18n="production.year" placeholder="Năm">
                     <input id="filterToWeek" type="number" min="1" max="53" class="form-control form-control-sm"
                         style="max-width: 90px;" data-i18n="production.toWeek" placeholder="Đến tuần">
-                    <input id="filterToYear" type="number" class="form-control form-control-sm"
-                        style="max-width: 90px;" data-i18n="production.year" placeholder="Năm">
+                    <input id="filterToYear" type="number" class="form-control form-control-sm" style="max-width: 90px;"
+                        data-i18n="production.year" placeholder="Năm">
                     <div class="btn-group pill-filter" role="group">
-                        <button type="button" class="btn btn-outline-secondary btn-sm active"
-                            data-status="" data-i18n="production.statusAll">All</button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm"
-                            data-status="INITIAL" data-i18n="production.statusInitial">Initial</button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm"
-                            data-status="ACTIVE" data-i18n="production.statusActive">Active</button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm"
-                            data-status="COMPLETE" data-i18n="production.statusComplete">Complete</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm active" data-status=""
+                            data-i18n="production.statusAll">All</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-status="INITIAL"
+                            data-i18n="production.statusInitial">Initial</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-status="ACTIVE"
+                            data-i18n="production.statusActive">Active</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-status="COMPLETE"
+                            data-i18n="production.statusComplete">Complete</button>
                     </div>
                     <button id="btnAddOrder" class="btn btn-primary btn-sm">
                         <i class="bi bi-plus-lg"></i> <span data-i18n="production.addOrder">Thêm đơn sản xuất</span>
@@ -138,7 +139,8 @@
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="orderModalTitle" data-i18n="production.modalTitle">Thêm đơn sản xuất</h5>
+                    <h5 class="modal-title" id="orderModalTitle" data-i18n="production.modalTitle">Thêm đơn sản xuất
+                    </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -170,13 +172,16 @@
                             </select>
                         </div>
                         <div class="col-md-4 d-flex align-items-end">
-                            <small class="text-muted" data-i18n="production.form.statusNote">Trạng thái ảnh hưởng trực tiếp tới MPS.</small>
+                            <small class="text-muted" data-i18n="production.form.statusNote">Trạng thái ảnh hưởng trực
+                                tiếp tới MPS.</small>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="production.close">Đóng</button>
-                    <button type="button" id="btnSaveOrder" class="btn btn-primary" data-i18n="production.save">Lưu</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                        data-i18n="production.close">Đóng</button>
+                    <button type="button" id="btnSaveOrder" class="btn btn-primary"
+                        data-i18n="production.save">Lưu</button>
                 </div>
             </div>
         </div>
@@ -376,7 +381,7 @@
                 const text = await res.text();
                 if (!res.ok) throw new Error(text);
                 let data = {};
-                try { data = JSON.parse(text); } catch (_) {}
+                try { data = JSON.parse(text); } catch (_) { }
                 bootstrap.Modal.getOrCreateInstance(document.getElementById("orderModal")).hide();
                 await loadOrders();
                 if (data.stockWarning) {
@@ -436,5 +441,3 @@
 </body>
 
 </html>
-
-

@@ -139,7 +139,8 @@
             salesPlans: {}, // key -> qty (forecast từ SalesPlans)
             salesActual: {}, // key -> qty (từ hóa đơn CONFIRM)
             shipEditable: {}, // key -> boolean (true = cho nhập forecast)
-            production: {}, // key -> qty for selected product
+            production: {}, // key -> qty for selected product (Product table)
+            productionByProduct: {}, // productId -> { key -> qty } (Material table: tổng stock_out từ mọi SP)
             purchase: {} // materialId -> { key -> qty }
         };
         let pendingShipChanges = {};
@@ -199,7 +200,15 @@
                 headers: { "Content-Type": "application/json" },
                 ...options
             });
-            if (!res.ok) throw new Error(await res.text() || res.statusText);
+            if (!res.ok) {
+                const text = await res.text();
+                let errMsg = text || res.statusText;
+                try {
+                    const j = JSON.parse(text);
+                    if (j?.error) errMsg = j.error;
+                } catch (_) {}
+                throw new Error(errMsg);
+            }
             if (res.status === 204) return null;
             return res.json();
         }
@@ -228,7 +237,10 @@
         }
 
         function formatNumber(value) {
-            return Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 0 });
+            const n = Number(value || 0);
+            return n % 1 === 0
+                ? n.toLocaleString("en-US", { minimumFractionDigits: 0 })
+                : n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 6 });
         }
 
         // ------------------ Data mapping ------------------
@@ -238,6 +250,16 @@
                 map[weekKey(r.week, r.year)] = Number(r.qty || 0);
             });
             return map;
+        }
+
+        function mapProductionByProduct(records) {
+            const byProduct = {};
+            records.forEach(r => {
+                const pid = r.productId;
+                if (!byProduct[pid]) byProduct[pid] = {};
+                byProduct[pid][weekKey(r.week, r.year)] = Number(r.qty || 0);
+            });
+            return byProduct;
         }
 
         function mapPurchase(records) {
@@ -378,9 +400,11 @@
             if (!weeks.length) return [];
             const lastWeek = weeks[weeks.length - 1];
             const firstWeek = weeks[0];
+            const prodByProduct = state.productionByProduct || {};
 
             return state.materials.map(mat => {
                 const opening = state.materialOpenings[mat.id] || null;
+                const consumptions = mat.consumptions || [{ productId, consume: Number(mat.consume || 0) }];
 
                 // Xác định điểm bắt đầu tính chuỗi balance
                 let calcStartWeek = firstWeek.week;
@@ -404,8 +428,11 @@
 
                 allWeeks.forEach(w => {
                     const key = weekKey(w.week, w.year);
-                    const proQty = Number(productionMap[key] || 0);
-                    const outQty = proQty * mat.consume;
+                    let outQty = 0;
+                    consumptions.forEach(c => {
+                        const proQty = Number((prodByProduct[c.productId] && prodByProduct[c.productId][key]) || 0);
+                        outQty += proQty * Number(c.consume || 0);
+                    });
                     const inQty = Number((state.purchase[mat.id] && state.purchase[mat.id][key]) || 0);
 
                     stockInMap[key] = inQty;
@@ -680,20 +707,22 @@
                 loadFromYear = viewStartYear;
             }
 
-            // materials + sales plan + sales actual + production in parallel
-            const [materials, salesPlans, salesActual, production] = await Promise.all([
-                fetchJson(`/api/materials?productId=${productId}`),
+            // materials (với consumptions từ mọi SP) + sales + production (selected + all)
+            const [materials, salesPlans, salesActual, productionSelected, productionAll] = await Promise.all([
+                fetchJson(`/api/materials?productId=${productId}&includeConsumptions=1`),
                 fetchJson(`/api/sales-plan?productId=${productId}&fromYear=${loadFromYear}&fromWeek=${loadFromWeek}&toYear=${endYear}&toWeek=${endWeek}`),
                 fetchJson(`/api/sales-actual?productId=${productId}&fromYear=${loadFromYear}&fromWeek=${loadFromWeek}&toYear=${endYear}&toWeek=${endWeek}`),
-                fetchJson(`/api/production?productId=${productId}&fromYear=${loadFromYear}&fromWeek=${loadFromWeek}&toYear=${endYear}&toWeek=${endWeek}`)
+                fetchJson(`/api/production?productId=${productId}&fromYear=${loadFromYear}&fromWeek=${loadFromWeek}&toYear=${endYear}&toWeek=${endWeek}`),
+                fetchJson(`/api/production?fromYear=${loadFromYear}&fromWeek=${loadFromWeek}&toYear=${endYear}&toWeek=${endWeek}`)
             ]);
 
             state.materials = materials;
             state.productOpening = productOpening ? { week: productOpening.week, year: productOpening.year, balance: Number(productOpening.balance) } : null;
             state.salesPlans = mapSalesPlans(salesPlans || []);
             state.salesActual = mapSalesActual(salesActual || []);
-            state.production = mapProduction(production || []);
-            console.log('[MPS] Production data loaded:', production);
+            state.production = mapProduction(productionSelected || []);
+            state.productionByProduct = mapProductionByProduct(productionAll || []);
+            console.log('[MPS] Production data loaded:', productionSelected);
             console.log('[MPS] Production map:', state.production);
 
             // material openings
@@ -799,7 +828,13 @@
 
         async function loadDataAndRender() {
             const productId = Number(document.getElementById("productSelect").value);
-            if (!productId) return;
+            if (!productId || !state.products.length) {
+                state.materials = [];
+                state.production = {};
+                state.productionByProduct = {};
+                renderAll();
+                return;
+            }
             await loadDataForProduct(productId);
             renderAll();
         }
@@ -880,8 +915,9 @@
             });
 
             init().catch(err => {
-                console.error(err);
-                alert(window.I18n?.t("mps.errorLoadData") || "Không tải được dữ liệu khởi động");
+                console.error("[MPS] Init failed:", err);
+                const msg = err?.message || err?.toString?.() || (window.I18n?.t("mps.errorLoadData") || "Không tải được dữ liệu khởi động");
+                alert(msg);
             });
         });
     </script>

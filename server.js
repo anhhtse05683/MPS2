@@ -284,8 +284,10 @@ app.get("/api/products", auth.requirePermission("product.view"), async (_req, re
 });
 
 // -------- Materials by product (via BOM) ----------
+// includeConsumptions=true: thêm consumptions[] = tất cả SP dùng NVL này + consume (để MPS tính stock_out từ mọi SP)
 app.get("/api/materials", auth.requirePermission("product.view"), async (req, res) => {
   const productId = parseIntSafe(req.query.productId);
+  const includeConsumptions = req.query.includeConsumptions === "true" || req.query.includeConsumptions === "1";
   if (!productId)
     return res.status(400).json({ error: "productId is required" });
   try {
@@ -302,7 +304,6 @@ app.get("/api/materials", auth.requirePermission("product.view"), async (req, re
         ORDER BY m.MaterialCode
       `);
     } catch (colErr) {
-      // Cột SafetyStockQty chưa tồn tại - chạy fix_safety_stock.sql
       if (colErr.message && /SafetyStockQty|Invalid column name/i.test(colErr.message)) {
         result = await pool.request().input("productId", sql.Int, productId).query(`
           SELECT m.MaterialId AS id, m.MaterialCode AS code, m.MaterialName AS name, b.ConsumePerUnit AS consume
@@ -314,7 +315,26 @@ app.get("/api/materials", auth.requirePermission("product.view"), async (req, re
         result.recordset = result.recordset.map((r) => ({ ...r, safetyStockQty: 0 }));
       } else throw colErr;
     }
-    res.json(result.recordset);
+    let rows = result.recordset;
+    if (includeConsumptions && rows.length) {
+      const materialIds = [...new Set(rows.map((r) => r.id))];
+      const consResult = await pool.request().query(`
+        SELECT b.MaterialId, b.ProductId AS productId, b.ConsumePerUnit AS consume
+        FROM BomLines b
+        WHERE b.MaterialId IN (${materialIds.map((id) => Number(id)).filter(Boolean).join(",") || "0"})
+      `);
+      const consByMat = {};
+      (consResult.recordset || []).forEach((c) => {
+        if (!consByMat[c.MaterialId]) consByMat[c.MaterialId] = [];
+        consByMat[c.MaterialId].push({ productId: c.productId, consume: Number(c.consume || 0) });
+      });
+      rows = rows.map((r) => ({
+        ...r,
+        consume: Number(r.consume || 0),
+        consumptions: consByMat[r.id] || [{ productId, consume: Number(r.consume || 0) }],
+      }));
+    }
+    res.json(rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch materials" });
@@ -894,19 +914,19 @@ app.get("/api/production", auth.requireAnyPermission("production.view", "mps.vie
       .json({ error: "fromYear/fromWeek/toYear/toWeek required" });
   try {
     const pool = await getPool();
-    const result = await pool
-      .request()
-      .input("productId", sql.Int, productId)
+    const req = pool.request()
       .input("fromYear", sql.Int, fromYear)
       .input("fromWeek", sql.Int, fromWeek)
       .input("toYear", sql.Int, toYear)
-      .input("toWeek", sql.Int, toWeek).query(`
+      .input("toWeek", sql.Int, toWeek);
+    if (productId) req.input("productId", sql.Int, productId);
+    const result = await req.query(`
         SELECT ProductId AS productId, PlanYear AS year, PlanWeek AS week, SUM(Quantity) AS qty
         FROM ProductionOrders
         WHERE UPPER(Status) IN ('ACTIVE','COMPLETE')
           AND (PlanYear > @fromYear OR (PlanYear = @fromYear AND PlanWeek >= @fromWeek))
           AND (PlanYear < @toYear OR (PlanYear = @toYear AND PlanWeek <= @toWeek))
-          AND (@productId IS NULL OR ProductId = @productId)
+          ${productId ? "AND ProductId = @productId" : ""}
         GROUP BY ProductId, PlanYear, PlanWeek
         ORDER BY PlanYear, PlanWeek
       `);
