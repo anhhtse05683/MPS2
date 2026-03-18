@@ -102,18 +102,61 @@
             </div>
             <div class="menu-section">
                 <div class="menu-section-title" data-i18n="erp.inventory">Quản lý kho</div>
-                <a href="#inventory" class="menu-item enabled" data-src="/modules/Inventory/index.html">
+                <div class="menu-item menu-submenu-toggle" data-submenu="inventory" role="button" tabindex="0">
                     <i class="bi bi-boxes"></i>
                     <span data-i18n="erp.stock">Tồn kho</span>
-                </a>
-                <a href="#warehouse" class="menu-item enabled" data-src="/modules/Inventory/warehouses.html">
-                    <i class="bi bi-building"></i>
-                    <span data-i18n="erp.warehouse">Kho hàng</span>
-                </a>
-                <!-- <a href="#purchasing" class="menu-item enabled" data-src="/modules/Purchase/index.html">
-                    <i class="bi bi-cart-plus"></i>
-                    <span data-i18n="erp.purchasing">Mua hàng</span>
-                </a> -->
+                    <span class="icon-nav-arrow"><i class="bi bi-chevron-down"></i></span>
+                </div>
+                <ul class="menu-submenu" id="submenu-inventory">
+                    <li>
+                        <a href="#inv-warehouses" class="menu-item menu-sub-item enabled" data-src="/modules/Inventory/warehouses.html">
+                            <i class="bi bi-building"></i>
+                            <span>Warehouses</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#inv-stock" class="menu-item menu-sub-item enabled" data-src="/modules/Inventory/stock.html">
+                            <i class="bi bi-box"></i>
+                            <span>Stock</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#inv-adjustments" class="menu-item menu-sub-item enabled" data-src="/modules/Inventory/adjustments.html">
+                            <i class="bi bi-sliders"></i>
+                            <span>Adjustments</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#inv-transfers" class="menu-item menu-sub-item enabled" data-src="/modules/Inventory/transfers.html">
+                            <i class="bi bi-arrow-left-right"></i>
+                            <span>Transfers</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#inv-receipts" class="menu-item menu-sub-item enabled" data-src="/modules/Inventory/receipts.html">
+                            <i class="bi bi-journal-arrow-down"></i>
+                            <span>Receipts</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#inv-history" class="menu-item menu-sub-item enabled" data-src="/modules/Inventory/transactions.html">
+                            <i class="bi bi-clock-history"></i>
+                            <span>Receipt/Issue history</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#inv-issues" class="menu-item menu-sub-item enabled" data-src="/modules/Inventory/issues.html">
+                            <i class="bi bi-box-arrow-up-right"></i>
+                            <span>Issues</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#inv-weekly-report" class="menu-item menu-sub-item enabled" data-src="/modules/Inventory/report.html">
+                            <i class="bi bi-bar-chart"></i>
+                            <span>Weekly stock report</span>
+                        </a>
+                    </li>
+                </ul>
             </div>
             <div class="menu-section">
                 <div class="menu-section-title" data-i18n="erp.sales">Bán hàng/Mua hàng & Khách hàng</div>
@@ -246,7 +289,7 @@
                 <div class="stat-card">
                     <div class="stat-header">
                         <div>
-                            <div class="stat-value">1,245</div>
+                            <div class="stat-value" id="statOrdersThisMonth">1,245</div>
                             <div class="stat-label" data-i18n="erp.ordersThisMonth">Đơn hàng trong tháng</div>
                             <div class="stat-change positive">
                                 <i class="bi bi-arrow-up"></i>
@@ -262,7 +305,7 @@
                 <div class="stat-card success">
                     <div class="stat-header">
                         <div>
-                            <div class="stat-value">₫2.8B</div>
+                            <div class="stat-value" id="statRevenueThisMonth">₫2.8B</div>
                             <div class="stat-label" data-i18n="erp.revenueThisMonth">Doanh thu tháng này</div>
                             <div class="stat-change positive">
                                 <i class="bi bi-arrow-up"></i>
@@ -278,7 +321,7 @@
                 <div class="stat-card warning">
                     <div class="stat-header">
                         <div>
-                            <div class="stat-value">156</div>
+                            <div class="stat-value" id="statProductsInProduction">156</div>
                             <div class="stat-label" data-i18n="erp.productsInProduction">Sản phẩm đang sản xuất</div>
                             <div class="stat-change negative">
                                 <i class="bi bi-arrow-down"></i>
@@ -294,7 +337,7 @@
                 <div class="stat-card info">
                     <div class="stat-header">
                         <div>
-                            <div class="stat-value">89%</div>
+                            <div class="stat-value" id="statOrderCompletionRate">89%</div>
                             <div class="stat-label" data-i18n="erp.orderCompletionRate">Tỷ lệ hoàn thành đơn hàng</div>
                             <div class="stat-change positive">
                                 <i class="bi bi-arrow-up"></i>
@@ -315,27 +358,33 @@
                     <span data-i18n="erp.quickActions">Thao tác nhanh</span>
                 </h3>
                 <div class="actions-grid">
-                    <a href="#new-order" class="action-btn">
+                    <!-- Đã có module: Sales -->
+                    <a href="#new-order" class="action-btn" data-src="/modules/Sales/index.html">
                         <i class="bi bi-plus-circle"></i>
                         <span data-i18n="erp.newOrder">Tạo đơn hàng mới</span>
                     </a>
-                    <a href="#new-production" class="action-btn">
+                    <!-- Đã có module: Production -->
+                    <a href="#new-production" class="action-btn" data-src="/modules/Production/index.html">
                         <i class="bi bi-play-circle"></i>
                         <span data-i18n="erp.startProduction">Bắt đầu sản xuất</span>
                     </a>
-                    <a href="#inventory-check" class="action-btn">
+                    <!-- Đã có module: Inventory overview -->
+                    <a href="#inventory-check" class="action-btn" data-src="/modules/Inventory/index.html">
                         <i class="bi bi-clipboard-check"></i>
                         <span data-i18n="erp.inventoryCheck">Kiểm kê kho</span>
                     </a>
-                    <a href="#new-purchase" class="action-btn">
+                    <!-- Đã có module: Purchase -->
+                    <a href="#new-purchase" class="action-btn" data-src="/modules/Purchase/index.html">
                         <i class="bi bi-cart-plus"></i>
                         <span data-i18n="erp.newPurchase">Đặt mua hàng</span>
                     </a>
-                    <a href="#quality-check" class="action-btn">
+                    <!-- Chưa phát triển: Quality -->
+                    <a href="#quality-check" class="action-btn" data-coming-soon>
                         <i class="bi bi-shield-check"></i>
                         <span data-i18n="erp.qualityCheck">Kiểm tra chất lượng</span>
                     </a>
-                    <a href="#report" class="action-btn">
+                    <!-- Chưa phát triển: Reports -->
+                    <a href="#report" class="action-btn" data-coming-soon>
                         <i class="bi bi-file-earmark-text"></i>
                         <span data-i18n="erp.createReport">Tạo báo cáo</span>
                     </a>
@@ -351,7 +400,8 @@
                             <span data-i18n="erp.systemModules">Các module hệ thống</span>
                         </h3>
                         <div class="modules-grid">
-                            <div class="module-card">
+                            <!-- Production module -->
+                            <div class="module-card" data-src="/modules/Production/index.html">
                                 <div class="module-icon">
                                     <i class="bi bi-gear-wide-connected"></i>
                                 </div>
@@ -359,7 +409,8 @@
                                 <p data-i18n="erp.productionManagementDesc">Theo dõi và quản lý quy trình sản xuất, kế
                                     hoạch sản xuất</p>
                             </div>
-                            <div class="module-card">
+                            <!-- Inventory module -->
+                            <div class="module-card" data-src="/modules/Inventory/index.html">
                                 <div class="module-icon">
                                     <i class="bi bi-boxes"></i>
                                 </div>
@@ -367,7 +418,8 @@
                                 <p data-i18n="erp.inventoryManagementDesc">Kiểm soát tồn kho, nhập xuất hàng hóa, điều
                                     chuyển kho</p>
                             </div>
-                            <div class="module-card">
+                            <!-- Sales module -->
+                            <div class="module-card" data-src="/modules/Sales/index.html">
                                 <div class="module-icon">
                                     <i class="bi bi-graph-up-arrow"></i>
                                 </div>
@@ -375,7 +427,8 @@
                                 <p data-i18n="erp.salesManagementDesc">Quản lý đơn hàng, khách hàng, báo giá và hợp đồng
                                 </p>
                             </div>
-                            <div class="module-card">
+                            <!-- Purchase module -->
+                            <div class="module-card" data-src="/modules/Purchase/index.html">
                                 <div class="module-icon">
                                     <i class="bi bi-cart-plus"></i>
                                 </div>
@@ -383,7 +436,8 @@
                                 <p data-i18n="erp.purchasingManagementDesc">Quản lý đơn mua hàng, nhà cung cấp, hợp đồng
                                     mua</p>
                             </div>
-                            <div class="module-card">
+                            <!-- Accounting - coming soon -->
+                            <div class="module-card" data-coming-soon>
                                 <div class="module-icon">
                                     <i class="bi bi-calculator"></i>
                                 </div>
@@ -391,7 +445,8 @@
                                 <p data-i18n="erp.accountingManagementDesc">Quản lý tài chính, công nợ, báo cáo tài
                                     chính</p>
                             </div>
-                            <div class="module-card">
+                            <!-- Quality - coming soon -->
+                            <div class="module-card" data-coming-soon>
                                 <div class="module-icon">
                                     <i class="bi bi-shield-check"></i>
                                 </div>
@@ -399,7 +454,8 @@
                                 <p data-i18n="erp.qualityManagementDesc">Kiểm tra chất lượng sản phẩm, quy trình QC/QA
                                 </p>
                             </div>
-                            <div class="module-card">
+                            <!-- Maintenance - coming soon -->
+                            <div class="module-card" data-coming-soon>
                                 <div class="module-icon">
                                     <i class="bi bi-tools"></i>
                                 </div>
@@ -407,7 +463,8 @@
                                 <p data-i18n="erp.maintenanceManagementDesc">Bảo trì thiết bị, máy móc, lịch bảo dưỡng
                                 </p>
                             </div>
-                            <div class="module-card">
+                            <!-- HR - coming soon -->
+                            <div class="module-card" data-coming-soon>
                                 <div class="module-icon">
                                     <i class="bi bi-people"></i>
                                 </div>
@@ -551,6 +608,13 @@
             if (match) match.classList.add('active');
         }
 
+        // Open module from dashboard (quick actions / module cards)
+        function openModuleFromDashboard(src) {
+            if (!src) return;
+            loadModule(src, { pushState: true });
+            setActiveMenuBySrc(src);
+        }
+
         // Submenu toggle (BOM)
         document.querySelectorAll('.menu-submenu-toggle').forEach(toggle => {
             toggle.addEventListener('click', (e) => {
@@ -627,6 +691,39 @@
             });
         });
 
+        // Dashboard quick actions -> open module hoặc hiển thị coming soon
+        document.querySelectorAll('.action-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const src = btn.getAttribute('data-src');
+                if (src) {
+                    e.preventDefault();
+                    openModuleFromDashboard(src);
+                    return;
+                }
+                if (btn.hasAttribute('data-coming-soon')) {
+                    e.preventDefault();
+                    alert(window.I18n?.t('erp.comingSoonAlert') || 'Coming soon!');
+                }
+            });
+        });
+
+        // Dashboard module cards -> open module hoặc hiển thị coming soon
+        document.querySelectorAll('.modules-grid .module-card').forEach(card => {
+            card.style.cursor = 'pointer';
+            card.addEventListener('click', (e) => {
+                const src = card.getAttribute('data-src');
+                if (src) {
+                    e.preventDefault();
+                    openModuleFromDashboard(src);
+                    return;
+                }
+                if (card.hasAttribute('data-coming-soon')) {
+                    e.preventDefault();
+                    alert(window.I18n?.t('erp.comingSoonAlert') || 'Coming soon!');
+                }
+            });
+        });
+
         function showDashboard() {
             const dashboard = document.getElementById('dashboardContent');
             const moduleContainer = document.getElementById('moduleContainer');
@@ -675,25 +772,6 @@
             restoreModuleFromHash();
         });
 
-        // Module cards click (placeholder)
-        const moduleCards = document.querySelectorAll('.module-card');
-        moduleCards.forEach(card => {
-            card.addEventListener('click', () => {
-                // Add your navigation logic here
-                console.log('Module clicked:', card.querySelector('h5').textContent);
-            });
-        });
-
-        // Action buttons
-        const actionBtns = document.querySelectorAll('.action-btn');
-        actionBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                // Add your action logic here
-                console.log('Action clicked:', btn.querySelector('span').textContent);
-            });
-        });
-
         // Animate stats on load
         const observerOptions = {
             threshold: 0.1,
@@ -731,14 +809,16 @@
             });
         }
 
-        // Menu coming soon: click hiển thị alert
-        document.querySelectorAll('[data-coming-soon]').forEach(el => {
-            el.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                alert(window.I18n?.t('erp.comingSoonAlert') || 'Coming soon!');
-            });
-        });
+        // Coming soon (sidebar menus): click hiển thị alert (delegation để tránh gắn nhiều listener)
+        document.addEventListener('click', (e) => {
+            const el = e.target && e.target.closest ? e.target.closest('[data-coming-soon]') : null;
+            if (!el) return;
+            // Chỉ áp dụng cho sidebar menu (tránh trùng với dashboard actions/cards)
+            if (!el.closest || !el.closest('.sidebar')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            alert(window.I18n?.t('erp.comingSoonAlert') || 'Coming soon!');
+        }, true);
 
         // Language selection is now handled in Settings page
 
